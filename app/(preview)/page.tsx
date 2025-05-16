@@ -20,6 +20,7 @@ import { DataVisualizer } from "@/components/DataVisualizer";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { ReportView } from "@/components/ReportView";
 import { AI } from "./actions";
+import { CSVUploadCard } from "@/components/CSVUploadCard";
 
 interface AIResponse {
   content: string | ReactNode;
@@ -241,6 +242,16 @@ export default function AnalyticsPage() {
                 I can help you analyze your business data, generate insights, and create visualizations.
                 Try one of the suggestions below or ask me anything!
               </p>
+            </motion.div>
+
+            {/* CSV Upload Card */}
+            <motion.div
+              className="w-full max-w-5xl mt-6 px-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+            >
+              <CSVUploadCard />
             </motion.div>
 
             {/* Enhanced Suggested Actions Grid */}
