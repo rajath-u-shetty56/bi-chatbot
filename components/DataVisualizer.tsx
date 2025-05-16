@@ -8,7 +8,8 @@ import {
   Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   ResponsiveContainer, TooltipProps 
 } from 'recharts';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { exportToPDF } from '@/lib/pdfUtils';
 
 export interface QueryResult {
   chartType?: "bar" | "line" | "pie" | "table";
@@ -26,6 +27,8 @@ const NoDataDisplay = ({ message }: { message?: string }) => (
 );
 
 export function DataVisualizer({ result, query }: { result: QueryResult; query: string }) {
+  const visualizationRef = useRef<HTMLDivElement>(null);
+
   // Validate data structure
   const isValidData = useMemo(() => {
     if (!result?.data) return false;
@@ -211,6 +214,17 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
     }
   };
 
+  const handleExportPDF = async () => {
+    if (!visualizationRef.current) return;
+    
+    try {
+      await exportToPDF(visualizationRef.current, result, query);
+    } catch (error) {
+      console.error('Error exporting to PDF:', error);
+      // You might want to show a toast notification here
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -218,7 +232,9 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
           <CardTitle className="text-lg">Visualization: {query}</CardTitle>
         </CardHeader>
         <CardContent>
-          {renderChart()}
+          <div ref={visualizationRef}>
+            {renderChart()}
+          </div>
         </CardContent>
       </Card>
 
@@ -251,7 +267,7 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
       </div>
 
       <div className="flex justify-between">
-        <Button variant="outline">Export Data</Button>
+        <Button variant="outline" onClick={handleExportPDF}>Export to PDF</Button>
         <Button variant="outline">Download Chart</Button>
       </div>
     </div>

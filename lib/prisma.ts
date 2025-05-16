@@ -180,17 +180,14 @@ export async function analyzeDataByQuery(
   query: string, 
   chartType: string = 'auto'
 ) {
-  // This is a simplified implementation that would need to be extended based on your NLP capabilities
   const lowerQuery = query.toLowerCase();
   
-  let data, summary, insights, recommendedChartType;
-  
-  // Get total tickets
+  // Get basic ticket stats
   const totalTickets = await db.ticket.count({ 
     where: { datasetId } 
   });
   
-  // Get resolved tickets (tickets with resolutionTime > 0)
+  // Get resolved tickets
   const resolvedTickets = await db.ticket.count({ 
     where: { 
       datasetId,
@@ -200,26 +197,99 @@ export async function analyzeDataByQuery(
     } 
   });
 
+  // Get satisfaction stats
+  const satisfactionStats = await db.ticket.aggregate({
+    where: { datasetId },
+    _avg: { satisfactionRate: true },
+    _min: { satisfactionRate: true },
+    _max: { satisfactionRate: true }
+  });
+
+  // Get resolution time stats
+  const resolutionStats = await db.ticket.aggregate({
+    where: { datasetId },
+    _avg: { resolutionTime: true },
+    _min: { resolutionTime: true },
+    _max: { resolutionTime: true }
+  });
+
+  // Get priority distribution
+  const priorityDist = await db.ticket.groupBy({
+    by: ['priority'],
+    where: { datasetId },
+    _count: true
+  });
+
+  // Get top issue types
+  const issueTypes = await db.ticket.groupBy({
+    by: ['issueType'],
+    where: { datasetId },
+    _count: true,
+    orderBy: {
+      _count: {
+        ticketId: 'desc'
+      }
+    },
+    take: 5
+  });
+
   // Format data for visualization
-  data = [
+  let data = [
     { name: 'Total Tickets', value: totalTickets },
     { name: 'Resolved', value: resolvedTickets },
     { name: 'Pending', value: totalTickets - resolvedTickets }
   ];
-  
-  summary = `Out of ${totalTickets} total tickets, ${resolvedTickets} have been resolved.`;
-  insights = [
-    `${((resolvedTickets / totalTickets) * 100).toFixed(1)}% of tickets are resolved`,
-    `${totalTickets - resolvedTickets} tickets are still pending resolution`,
-    `Total ticket volume: ${totalTickets}`
-  ];
-  recommendedChartType = 'bar';
 
-  // Use the requested chart type or the recommended one
-  const finalChartType = chartType === 'auto' ? recommendedChartType : chartType;
-  
+  // Generate comprehensive summary
+  const summary = [
+    `Analysis of ${totalTickets} total tickets shows ${resolvedTickets} (${((resolvedTickets/totalTickets)*100).toFixed(1)}%) have been resolved.`,
+    `Average resolution time is ${resolutionStats._avg.resolutionTime?.toFixed(1) || 'N/A'} days.`,
+    `Customer satisfaction averages ${satisfactionStats._avg.satisfactionRate?.toFixed(1) || 'N/A'}/5.`
+  ].join(' ');
+
+  // Generate detailed insights
+  const insights = [
+    // Ticket Volume Insights
+    `${((resolvedTickets / totalTickets) * 100).toFixed(1)}% of tickets are resolved`,
+    `${totalTickets - resolvedTickets} tickets are pending resolution`,
+    
+    // Resolution Time Insights
+    `Fastest resolution: ${resolutionStats._min.resolutionTime?.toFixed(1) || 'N/A'} days`,
+    `Slowest resolution: ${resolutionStats._max.resolutionTime?.toFixed(1) || 'N/A'} days`,
+    `Average resolution time: ${resolutionStats._avg.resolutionTime?.toFixed(1) || 'N/A'} days`,
+    
+    // Satisfaction Insights
+    `Highest satisfaction rating: ${satisfactionStats._max.satisfactionRate?.toFixed(1) || 'N/A'}/5`,
+    `Lowest satisfaction rating: ${satisfactionStats._min.satisfactionRate?.toFixed(1) || 'N/A'}/5`,
+    `Average satisfaction rating: ${satisfactionStats._avg.satisfactionRate?.toFixed(1) || 'N/A'}/5`,
+    
+    // Priority Distribution
+    ...priorityDist.map(p => 
+      `${p.priority} priority: ${p._count} tickets (${((p._count/totalTickets)*100).toFixed(1)}%)`
+    ),
+    
+    // Top Issues
+    ...issueTypes.map(issue => 
+      `Issue type "${issue.issueType}": ${issue._count} tickets`
+    )
+  ];
+
+  // Determine chart type based on query content
+  let recommendedChartType = chartType;
+  if (chartType === 'auto') {
+    if (lowerQuery.includes('distribution') || lowerQuery.includes('breakdown')) {
+      recommendedChartType = 'pie';
+    } else if (lowerQuery.includes('trend') || lowerQuery.includes('over time')) {
+      recommendedChartType = 'line';
+    } else if (lowerQuery.includes('compare') || lowerQuery.includes('comparison')) {
+      recommendedChartType = 'bar';
+    } else {
+      recommendedChartType = 'bar';
+    }
+  }
+
   return {
-    chartType: finalChartType,
+    chartType: recommendedChartType,
     data,
     summary,
     insights
