@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Ticket {
+  id               String   @id @default(cuid())
+  ticketId         String   @map("ticket_id")
+  date             DateTime
+  employeeId       String   @map("employee_id")
+  agentId          String   @map("agent_id")
+  requestCategory  String   @map("request_category")
+  issueType        String   @map("issue_type")
+  severity         String
+  priority         String
+  resolutionTime   Float    @map("resolution_time")
+  satisfactionRate Int      @map("satisfaction_rate")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  datasetId        String   @map("dataset_id")
+  dataset          Dataset  @relation(fields: [datasetId], references: [id])
+
+  @@unique([ticketId, datasetId])
+  @@index([datasetId])
+  @@map("tickets")
+}
+
+model Dataset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  tickets     Ticket[]
+
+  @@map("datasets")
+}
