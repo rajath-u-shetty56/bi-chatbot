@@ -4,6 +4,7 @@ import { useActions } from "ai/rsc";
 import { Message } from "@/components/message";
 import { useScrollToBottom } from "@/lib/hooks/useScrollToBottom";
 import { motion } from "framer-motion";
+import { generateId } from "ai";
 import { 
   ChatActions, 
   ChatTextMessage, 
@@ -17,7 +18,13 @@ import { DatasetUploadForm } from "@/components/DatasetUploadForm";
 import { DatasetSummaryView } from "@/components/DatasetSummaryView";
 import { DataVisualizer } from "@/components/DataVisualizer";
 import { ErrorMessage } from "@/components/ErrorMessage";
+import { ReportView } from "@/components/ReportView";
 import { AI } from "./actions";
+
+interface AIResponse {
+  content: string | ReactNode;
+  ui?: UIComponentData;
+}
 
 // Helper function to render UI components based on type
 const renderUIComponent = (data: UIComponentData): ReactNode => {
@@ -60,6 +67,8 @@ const renderUIComponent = (data: UIComponentData): ReactNode => {
       return <DatasetSummaryView summary={data.data} />;
     case "data-visualization":
       return <DataVisualizer result={data.data} query="" />;
+    case "report":
+      return <ReportView data={data.data} />;
     case "error":
       return <ErrorMessage message={data.message} />;
     default:
@@ -136,10 +145,16 @@ export default function AnalyticsPage() {
       const response = await actions.sendMessage(input);
       if (response) {
         const assistantMessage: UIMessage = {
-          id: Math.random().toString(),
+          id: generateId(),
           role: "assistant" as MessageRole,
-          content: typeof response === 'string' ? response : response.content,
-          ui: typeof response === 'string' ? undefined : response.ui,
+          content: String(
+            typeof response === 'object' && 'content' in response 
+              ? response.content 
+              : response
+          ),
+          ui: typeof response === 'object' && 'ui' in response 
+            ? response.ui as UIComponentData
+            : undefined,
         };
         setMessages((messages) => [...messages, assistantMessage]);
         requestAnimationFrame(() => {
@@ -167,10 +182,16 @@ export default function AnalyticsPage() {
       const response = await actions.sendMessage(action);
       if (response) {
         const assistantMessage: UIMessage = {
-          id: Math.random().toString(),
+          id: generateId(),
           role: "assistant" as MessageRole,
-          content: typeof response === 'string' ? response : response.content,
-          ui: typeof response === 'string' ? undefined : response.ui,
+          content: String(
+            typeof response === 'object' && 'content' in response 
+              ? response.content 
+              : response
+          ),
+          ui: typeof response === 'object' && 'ui' in response 
+            ? response.ui as UIComponentData
+            : undefined,
         };
         setMessages((messages) => [...messages, assistantMessage]);
         requestAnimationFrame(() => {

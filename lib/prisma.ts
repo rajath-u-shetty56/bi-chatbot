@@ -181,72 +181,40 @@ export async function analyzeDataByQuery(
   chartType: string = 'auto'
 ) {
   // This is a simplified implementation that would need to be extended based on your NLP capabilities
-  // Currently handling a few common query patterns manually
+  const lowerQuery = query.toLowerCase();
   
   let data, summary, insights, recommendedChartType;
   
-  const lowerQuery = query.toLowerCase();
+  // Get total tickets
+  const totalTickets = await db.ticket.count({ 
+    where: { datasetId } 
+  });
   
-  // Determine what data to fetch based on the query
-  if (lowerQuery.includes('resolution time') || lowerQuery.includes('how long')) {
-    const whereClause = { datasetId };
-    const result = await getResolutionTimeAnalytics(whereClause);
-    
-    data = result.data;
-    summary = `Average resolution time is ${result.avgResolutionTime.toFixed(2)} days`;
-    insights = [
-      `${result.fastestResolution.toFixed(2)} days was the fastest resolution time`,
-      `${result.slowestResolution.toFixed(2)} days was the slowest resolution time`,
-      `${result.percentageUnderDay.toFixed(2)}% of tickets were resolved in under a day`
-    ];
-    recommendedChartType = 'line';
-  } 
-  else if (lowerQuery.includes('satisfaction') || lowerQuery.includes('customer rating')) {
-    const whereClause = { datasetId };
-    const result = await getSatisfactionAnalytics(whereClause);
-    
-    data = result.ratingDistribution;
-    summary = `Average satisfaction rating is ${result.avgRating.toFixed(2)}/5`;
-    insights = [
-      `${result.percentageHigh.toFixed(2)}% of tickets received high satisfaction ratings (4-5)`,
-      `${result.percentageLow.toFixed(2)}% of tickets received low satisfaction ratings (1-2)`
-    ];
-    recommendedChartType = 'pie';
-  }
-  else if (lowerQuery.includes('issue') || lowerQuery.includes('problem type')) {
-    const whereClause = { datasetId };
-    const result = await getIssueDistributionAnalytics(whereClause);
-    
-    data = result.issueDistribution;
-    summary = `Found ${Object.keys(result.issueDistribution).length} different issue types`;
-    insights = [
-      `"${result.topIssue.type}" is the most common issue type with ${result.topIssue.count} tickets`,
-      `"${result.categories[0].name}" is the most common request category`
-    ];
-    recommendedChartType = 'bar';
-  }
-  else if (lowerQuery.includes('agent') || lowerQuery.includes('performance')) {
-    const whereClause = { datasetId };
-    const result = await getAgentPerformanceAnalytics(whereClause);
-    
-    data = result.agentPerformance;
-    summary = `Analyzed performance of ${result.agentPerformance.length} agents`;
-    insights = [
-      `Agent ${result.topPerformer.id} has the highest satisfaction rating (${result.topPerformer.avgSatisfaction.toFixed(2)})`,
-      `Agent ${result.fastestAgent.id} has the fastest resolution time (${result.fastestAgent.avgResolution.toFixed(2)} days)`
-    ];
-    recommendedChartType = 'table';
-  }
-  else {
-    // Default to a basic summary if the query isn't recognized
-    const ticketCount = await db.ticket.count({ where: { datasetId } });
-    
-    data = { totalTickets: ticketCount };
-    summary = `Dataset contains ${ticketCount} tickets`;
-    insights = ["Use more specific queries to analyze particular aspects of the data"];
-    recommendedChartType = 'bar';
-  }
+  // Get resolved tickets (tickets with resolutionTime > 0)
+  const resolvedTickets = await db.ticket.count({ 
+    where: { 
+      datasetId,
+      resolutionTime: {
+        gt: 0
+      }
+    } 
+  });
+
+  // Format data for visualization
+  data = [
+    { name: 'Total Tickets', value: totalTickets },
+    { name: 'Resolved', value: resolvedTickets },
+    { name: 'Pending', value: totalTickets - resolvedTickets }
+  ];
   
+  summary = `Out of ${totalTickets} total tickets, ${resolvedTickets} have been resolved.`;
+  insights = [
+    `${((resolvedTickets / totalTickets) * 100).toFixed(1)}% of tickets are resolved`,
+    `${totalTickets - resolvedTickets} tickets are still pending resolution`,
+    `Total ticket volume: ${totalTickets}`
+  ];
+  recommendedChartType = 'bar';
+
   // Use the requested chart type or the recommended one
   const finalChartType = chartType === 'auto' ? recommendedChartType : chartType;
   

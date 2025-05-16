@@ -8,6 +8,7 @@ import {
   Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   ResponsiveContainer, TooltipProps 
 } from 'recharts';
+import { useMemo } from 'react';
 
 export interface QueryResult {
   chartType?: "bar" | "line" | "pie" | "table";
@@ -18,39 +19,52 @@ export interface QueryResult {
 
 const CHART_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899'];
 
-export function DataVisualizer({ result, query }: { result: QueryResult; query: string }) {
-  // Determine what chart to render based on chartType
-  const renderChart = () => {
-    // If no data available
-    if (!result.data || result.data.length === 0) {
-      return (
-        <div className="flex items-center justify-center h-64 border rounded-md bg-gray-50 dark:bg-gray-800">
-          <p className="text-gray-500">No data available to visualize</p>
-        </div>
-      );
-    }
+const NoDataDisplay = ({ message }: { message?: string }) => (
+  <div className="flex items-center justify-center h-64 border rounded-md bg-gray-50 dark:bg-gray-800">
+    <p className="text-gray-500">{message || 'No data available to visualize'}</p>
+  </div>
+);
 
-    // Render appropriate chart based on chart type
-    switch (result.chartType) {
-      case "bar":
-        return renderBarChart();
-      case "line":
-        return renderLineChart();
-      case "pie":
-        return renderPieChart();
-      case "table":
-        return renderTable();
-      default:
-        // Default to table if chart type not specified
-        return renderTable();
+export function DataVisualizer({ result, query }: { result: QueryResult; query: string }) {
+  // Validate data structure
+  const isValidData = useMemo(() => {
+    if (!result?.data) return false;
+    if (Array.isArray(result.data)) {
+      return result.data.length > 0 && typeof result.data[0] === 'object';
     }
-  };
+    return typeof result.data === 'object';
+  }, [result?.data]);
+
+  // Get safe data keys
+  const dataKeys = useMemo(() => {
+    if (!isValidData) return [];
+    if (Array.isArray(result.data)) {
+      const firstItem = result.data[0];
+      return Object.keys(firstItem).filter(key => key !== 'name');
+    }
+    return ['value'];
+  }, [isValidData, result?.data]);
+
+  // Format data for visualization if needed
+  const formattedData = useMemo(() => {
+    if (!isValidData) return [];
+    if (!Array.isArray(result.data)) {
+      // Convert object to array format
+      return Object.entries(result.data).map(([name, value]) => ({
+        name,
+        value: typeof value === 'number' ? value : 0
+      }));
+    }
+    return result.data;
+  }, [isValidData, result?.data]);
 
   const renderBarChart = () => {
+    if (!isValidData) return <NoDataDisplay message="Invalid data format for bar chart" />;
+
     return (
       <ResponsiveContainer width="100%" height={350}>
         <BarChart
-          data={result.data}
+          data={formattedData}
           margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
         >
           <CartesianGrid strokeDasharray="3 3" />
@@ -64,25 +78,25 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
           <YAxis />
           <Tooltip />
           <Legend />
-          {Object.keys(result.data[0])
-            .filter(key => key !== 'name')
-            .map((key, index) => (
-              <Bar 
-                key={key} 
-                dataKey={key} 
-                fill={CHART_COLORS[index % CHART_COLORS.length]} 
-              />
-            ))}
+          {dataKeys.map((key, index) => (
+            <Bar 
+              key={key} 
+              dataKey={key} 
+              fill={CHART_COLORS[index % CHART_COLORS.length]} 
+            />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     );
   };
 
   const renderLineChart = () => {
+    if (!isValidData) return <NoDataDisplay message="Invalid data format for line chart" />;
+
     return (
       <ResponsiveContainer width="100%" height={350}>
         <LineChart
-          data={result.data}
+          data={formattedData}
           margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
         >
           <CartesianGrid strokeDasharray="3 3" />
@@ -96,41 +110,41 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
           <YAxis />
           <Tooltip />
           <Legend />
-          {Object.keys(result.data[0])
-            .filter(key => key !== 'name')
-            .map((key, index) => (
-              <Line
-                key={key}
-                type="monotone"
-                dataKey={key}
-                stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                activeDot={{ r: 8 }}
-              />
-            ))}
+          {dataKeys.map((key, index) => (
+            <Line
+              key={key}
+              type="monotone"
+              dataKey={key}
+              stroke={CHART_COLORS[index % CHART_COLORS.length]}
+              activeDot={{ r: 8 }}
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     );
   };
 
   const renderPieChart = () => {
+    if (!isValidData) return <NoDataDisplay message="Invalid data format for pie chart" />;
+
     return (
       <ResponsiveContainer width="100%" height={350}>
         <PieChart>
           <Pie
-            data={result.data}
+            data={formattedData}
             cx="50%"
             cy="50%"
             labelLine={true}
-            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+            label={({ name, value }) => `${name}: ${value}`}
             outerRadius={120}
             fill="#8884d8"
             dataKey="value"
           >
-            {result.data.map((entry: any, index: number) => (
+            {formattedData.map((entry: any, index: number) => (
               <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
             ))}
           </Pie>
-          <Tooltip formatter={(value, name) => [`${value}`, `${name}`]} />
+          <Tooltip formatter={(value) => [value, '']} />
           <Legend />
         </PieChart>
       </ResponsiveContainer>
@@ -138,9 +152,9 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
   };
 
   const renderTable = () => {
-    if (!result.data || result.data.length === 0) return null;
+    if (!isValidData) return <NoDataDisplay message="Invalid data format for table view" />;
     
-    const columns = Object.keys(result.data[0]);
+    const columns = Object.keys(formattedData[0]);
     
     return (
       <div className="w-full overflow-x-auto">
@@ -159,7 +173,7 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-            {result.data.map((row: any, rowIndex: number) => (
+            {formattedData.map((row: any, rowIndex: number) => (
               <tr key={rowIndex} className={rowIndex % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50 dark:bg-gray-800"}>
                 {columns.map((column) => (
                   <td
@@ -177,6 +191,26 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
     );
   };
 
+  // Determine what chart to render based on chartType
+  const renderChart = () => {
+    if (!isValidData) return <NoDataDisplay />;
+
+    // Render appropriate chart based on chart type
+    switch (result.chartType) {
+      case "bar":
+        return renderBarChart();
+      case "line":
+        return renderLineChart();
+      case "pie":
+        return renderPieChart();
+      case "table":
+        return renderTable();
+      default:
+        // Default to bar chart if chart type not specified
+        return renderBarChart();
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -189,7 +223,7 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
       </Card>
 
       <div className="space-y-4">
-        {result.summary && (
+        {result?.summary && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Summary</CardTitle>
@@ -200,7 +234,7 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
           </Card>
         )}
 
-        {result.insights && result.insights.length > 0 && (
+        {result?.insights && result.insights.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Key Insights</CardTitle>

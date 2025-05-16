@@ -16,7 +16,7 @@ export interface BaseUIData {
 
 export interface AnalyticsUIData extends BaseUIData {
   type: 'analytics';
-  data: any;
+  data: AnalyticsData;
   metric: string;
 }
 
@@ -31,53 +31,22 @@ export interface DatasetListUIData extends BaseUIData {
 
 export interface DatasetSummaryUIData extends BaseUIData {
   type: 'dataset-summary';
-  data: {
-    id: string;
-    name: string;
-    description?: string;
-    recordCount: number;
-    dateRange: {
-      start: string;
-      end: string;
-    };
-    metrics: {
-      avgResolutionTime: number;
-      avgSatisfactionRate: number;
-      topIssueTypes: Array<{name: string, count: number}>;
-      priorityDistribution: Record<string, number>;
-    };
-  };
+  data: DatasetSummary;
 }
 
 export interface DataVisualizerUIData extends BaseUIData {
   type: 'data-visualization';
-  data: {
-    chartType?: "bar" | "line" | "pie" | "table";
-    data: any[];
-    summary: string;
-    insights: Array<string>;
-  };
+  data: QueryResult;
 }
 
 export interface ErrorUIData extends BaseUIData {
   type: 'error';
   message: string;
-  showDetails?: boolean;
-  details?: string;
 }
 
 export interface ReportUIData extends BaseUIData {
   type: 'report';
-  data: {
-    datasetId: string;
-    reportType: string;
-    metrics: string[];
-    generated: string;
-    sections: Array<{
-      title: string;
-      content: string;
-    }>;
-  };
+  data: ReportData;
 }
 
 export type UIComponentData = 
@@ -146,6 +115,12 @@ export interface ReportData {
   sections: Array<{
     title: string;
     content: string;
+    visualization?: {
+      chartType?: "bar" | "line" | "pie" | "table";
+      data: any[];
+      summary: string;
+      insights: Array<string>;
+    };
   }>;
 }
 
@@ -177,29 +152,6 @@ export interface StreamingState {
 export interface StreamingTextMessage extends ChatBaseMessage {
   content: string;
   streaming?: StreamingState;
-}
-
-// Component specific types
-export interface StockDataProps {
-  symbol: string;
-  timeframe?: 'recent' | 'full' | 'historical';
-  startDate?: Date;
-  endDate?: Date;
-}
-
-export interface RecommendationData {
-  strongBuy: number;
-  buy: number;
-  hold: number;
-  sell: number;
-  strongSell: number;
-  period: string;
-}
-
-export interface StockRecommendationProps {
-  symbol: string;
-  data: RecommendationData[];
-  loading?: boolean;
 }
 
 // Chat state types
@@ -242,4 +194,46 @@ export interface ChatInputProps {
     label: string;
     action: string;
   }>;
-} 
+}
+
+// Analytics result types
+export interface BaseAnalyticsResult {
+  data: any[];
+  insights?: string[];
+}
+
+export interface ResolutionTimeAnalytics extends BaseAnalyticsResult {
+  avgResolutionTime: number;
+  fastestResolution: number;
+  slowestResolution: number;
+  percentageUnderDay: number;
+  data: Array<{ date: string; avgResolutionTime: number }>;
+}
+
+export interface SatisfactionAnalytics extends BaseAnalyticsResult {
+  avgRating: number;
+  percentageHigh: number;
+  percentageLow: number;
+  data: Array<{ rating: number; count: number }>;
+  ratingDistribution: Array<{ rating: number; count: number }>;
+}
+
+export interface IssueDistributionAnalytics extends BaseAnalyticsResult {
+  issueDistribution: Array<{ type: string; count: number }>;
+  topIssue: { type: string; count: number };
+  categories: Array<{ name: string; count: number }>;
+  data: Array<{ type: string; count: number }>;
+}
+
+export interface TicketTrendsAnalytics extends BaseAnalyticsResult {
+  totalTickets: number;
+  avgTicketsPerPeriod: number;
+  maxTicketsInPeriod: number;
+  data: Array<{ period: string; count: number }>;
+}
+
+export type AnalyticsResult =
+  | ResolutionTimeAnalytics
+  | SatisfactionAnalytics
+  | IssueDistributionAnalytics
+  | TicketTrendsAnalytics; 
