@@ -12,6 +12,7 @@ import {
 import { useMemo, useRef, useState } from 'react';
 import { exportToPDF } from '@/lib/pdfUtils';
 import { AIExplanation } from './AIExplanation';
+import { QueryExplanation } from './QueryExplanation';
 
 export interface QueryResult {
   chartType?: "bar" | "line" | "pie" | "table";
@@ -29,6 +30,7 @@ interface AnalyticsResponse {
     summaryMetrics: Array<{ label: string; value: string }>;
     insights: string[];
     data: Array<{ type: string; count: number }>;
+    aiExplanation?: string;
   };
   metric: string;
 }
@@ -243,7 +245,7 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
     const topItem = sortedData[0];
 
     return {
-      explanation: `Analysis of ${total} items shows ${topItem.type} as the most common type with ${topItem.count} occurrences (${((topItem.count/total)*100).toFixed(1)}% of total).`,
+      explanation: data.aiExplanation || `Analysis of ${total} items shows ${topItem.type} as the most common type with ${topItem.count} occurrences (${((topItem.count/total)*100).toFixed(1)}% of total).`,
       analysisPoints: [
         {
           title: "Distribution Overview",
@@ -698,6 +700,14 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
 
   return (
     <div className="space-y-6">
+      {/* Query Explanation Section */}
+      <QueryExplanation
+        query={query}
+        explanation={result.aiExplanation || (result as any)?.data?.aiExplanation}
+        summary={(result as any)?.data?.description}
+        insights={(result as any)?.data?.insights}
+      />
+
       {/* Visualization Card */}
       <Card>
         <CardHeader>

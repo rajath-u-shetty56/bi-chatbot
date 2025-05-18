@@ -728,6 +728,16 @@ function generateAIExplanation(query: string, data: any[], summary: string, insi
     insightsCount: insights.length
   });
 
+  // Extract key metrics for analysis
+  const metrics = {
+    totalItems: data.length,
+    hasTimeData: data.some(d => d.date || d.period || d.timestamp),
+    categories: [...new Set(data.map(d => d.type || d.category || d.name))].length,
+    maxValue: Math.max(...data.map(d => d.value || d.count || 0)),
+    minValue: Math.min(...data.map(d => d.value || d.count || 0))
+  };
+
+  // Common patterns in the query
   if (query.includes('ticket') && (query.includes('status') || query.includes('resolved'))) {
     const resolutionRate = insights[0] ? parseInt(insights[0]) : 0;
     return `Based on your query about ticket status, I analyzed the resolution patterns in your dataset. ` +
@@ -765,10 +775,29 @@ function generateAIExplanation(query: string, data: any[], summary: string, insi
            `${insights[2]?.toLowerCase() || 'there are patterns in issue distribution'}. This suggests that focusing resources on these ` +
            `top issues could significantly impact overall service efficiency.`;
   }
+
+  if (query.includes('trend') || query.includes('over time') || query.includes('pattern')) {
+    return `I've analyzed the temporal patterns in your data. ` +
+           `${summary} The analysis spans ${metrics.totalItems} data points, showing ${
+             metrics.maxValue > metrics.minValue * 1.5 ? 'significant variations' : 'relatively stable patterns'
+           } over time. ` +
+           `Key insights include: ${insights.slice(0, 3).map(i => i.toLowerCase()).join(', ')}. ` +
+           `This temporal analysis can help in forecasting and resource planning.`;
+  }
+
+  if (query.includes('compare') || query.includes('difference') || query.includes('versus')) {
+    return `I've performed a comparative analysis of your data. ` +
+           `${summary} Across ${metrics.categories} different categories, the analysis reveals ${
+             metrics.maxValue > metrics.minValue * 2 ? 'significant disparities' : 'relatively balanced distribution'
+           }. ` +
+           `Notable findings include: ${insights.slice(0, 3).map(i => i.toLowerCase()).join(', ')}. ` +
+           `These comparisons highlight areas for potential optimization and improvement.`;
+  }
   
-  // Default explanation
-  return `I've analyzed your ticket data to provide comprehensive insights. ` +
-         `${summary} The analysis reveals several key points: ` +
-         `${insights.slice(0, 3).map(insight => insight?.toLowerCase()).join(', ') || 'various patterns in the data'}. ` +
-         `These findings can help inform decisions about resource allocation and process improvements.`;
+  // Enhanced default explanation
+  return `I've conducted a comprehensive analysis of your data based on the query "${query}". ` +
+         `${summary} The analysis covers ${metrics.totalItems} data points across ${metrics.categories} categories. ` +
+         `Key findings include: ${insights.slice(0, 3).map(i => i.toLowerCase()).join(', ')}. ` +
+         `${metrics.hasTimeData ? 'The temporal patterns in the data suggest opportunities for trend-based optimization. ' : ''}` +
+         `These insights can help inform strategic decisions and process improvements.`;
 }

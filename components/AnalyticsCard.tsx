@@ -39,6 +39,7 @@ interface AnalyticsData {
   distribution?: Array<DataPoint>;
   insights: Array<string>;
   data: any[];
+  aiExplanation?: string;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
@@ -263,9 +264,10 @@ export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: s
           </div>
 
           <Tabs defaultValue="charts">
-            <TabsList className="grid grid-cols-2">
+            <TabsList className="grid grid-cols-3">
               <TabsTrigger value="charts">Charts</TabsTrigger>
               <TabsTrigger value="insights">Insights</TabsTrigger>
+              <TabsTrigger value="analysis">Analysis</TabsTrigger>
             </TabsList>
             
             <TabsContent value="charts" className="space-y-4 mt-4">
@@ -290,6 +292,17 @@ export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: s
                     </li>
                   ))}
                 </ul>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="analysis" className="mt-4">
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium">AI Analysis</h4>
+                <div className="prose dark:prose-invert max-w-none">
+                  <p className="text-gray-700 dark:text-gray-300">
+                    {data.aiExplanation || "No AI analysis available for this data."}
+                  </p>
+                </div>
               </div>
             </TabsContent>
           </Tabs>

@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { CoreMessage } from 'ai';
+import { ANALYTICS_METRICS } from '@/app/(preview)/actions';
 
 // Dataset types
 export interface Dataset {
@@ -81,6 +82,8 @@ export interface AnalyticsData {
   summaryMetrics: Array<{ label: string; value: string }>;
   insights: Array<string>;
   data: any[];
+  aiExplanation?: string;
+  chartType?: ChartType;
 }
 
 export interface DatasetSummary {
@@ -100,8 +103,10 @@ export interface DatasetSummary {
   };
 }
 
+export type ChartType = "bar" | "line" | "pie" | "table";
+
 export interface QueryResult {
-  chartType?: "bar" | "line" | "pie" | "table";
+  chartType?: ChartType;
   data: any[];
   summary: string;
   insights: Array<string>;
@@ -259,4 +264,12 @@ export interface StreamableUIProps {
 
 export interface StreamableValue {
   value: string;
+}
+
+export interface IntentResult {
+  intent: string;
+  metric?: keyof typeof ANALYTICS_METRICS;
+  query?: string;
+  metrics?: Array<keyof typeof ANALYTICS_METRICS>;
+  reportType?: string;
 } 

@@ -24,7 +24,11 @@ import {
   UIMessage, 
   MessageRole,
   StreamableUIProps,
-  StreamableValue
+  StreamableValue,
+  IntentResult,
+  ChartType,
+  QueryResult,
+  AnalyticsData
 } from "@/types/chat";
 
 // Initialize OpenAI client
@@ -67,13 +71,17 @@ const ANALYTICS_QUERIES = {
   },
 } as const;
 
-// Interface for analytics data
+// Update the type definitions
+type ChartType = "bar" | "line" | "pie" | "table";
+
 interface AnalyticsData {
   title: string;
   description: string;
   summaryMetrics: Array<{ label: string; value: string }>;
   insights: Array<string>;
   data: any[];
+  aiExplanation?: string;
+  chartType?: ChartType;
 }
 
 // Interface for dataset
@@ -104,7 +112,7 @@ interface DatasetSummary {
 
 // Interface for query results
 interface QueryResult {
-  chartType?: "bar" | "line" | "pie" | "table";
+  chartType?: ChartType;
   data: any[];
   summary: string;
   insights: Array<string>;
@@ -391,9 +399,11 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
           summaryMetrics: [],
           insights: [],
           data: analyticsData,
+          chartType: queryConfig.chartType,
         };
 
-        // Add metric-specific data
+        // Add metric-specific data and AI explanations
+        let aiExplanation = "";
         if (metric === ANALYTICS_METRICS.issue_distribution) {
           const issueData = rawAnalytics as IssueDistributionAnalytics;
           analytics.summaryMetrics = [
@@ -410,29 +420,101 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
             `Most common issue: ${issueData.topIssue.type} with ${issueData.topIssue.count} tickets`,
             `Top category: ${issueData.categories[0].name} with ${issueData.categories[0].count} tickets`,
           ];
-        } else {
-          analytics.summaryMetrics = Object.entries(rawAnalytics)
-            .filter(
-              ([key]) =>
-                !key.includes("data") &&
-                !key.includes("ratingDistribution") &&
-                key !== "error" &&
-                key !== "insights"
-            )
-            .map(([key, value]) => ({
-              label: key
-                .replace(/_/g, " ")
-                .split(" ")
-                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(" "),
-              value:
-                typeof value === "number"
-                  ? value.toLocaleString()
-                  : String(value || "N/A"),
-            }));
-          analytics.insights =
-            rawAnalytics.insights?.map((insight) => String(insight)) || [];
+          aiExplanation = `Based on the analysis of issue distribution, the data shows that ${issueData.topIssue.type} is the most common issue type with ${issueData.topIssue.count} tickets. This represents a significant portion of all tickets. The distribution across ${issueData.categories.length} categories suggests ${issueData.categories.length > 5 ? 'a diverse range of issues' : 'a concentrated set of issues'}. Understanding this distribution can help in resource allocation and identifying areas needing immediate attention.`;
+        } else if (metric === ANALYTICS_METRICS.resolution_time) {
+          const resolutionData = rawAnalytics as ResolutionTimeAnalytics;
+          analytics.summaryMetrics = [
+            {
+              label: "Average Resolution Time",
+              value: `${resolutionData.avgResolutionTime.toFixed(1)} days`,
+            },
+            {
+              label: "Fastest Resolution",
+              value: `${resolutionData.fastestResolution.toFixed(1)} days`,
+            },
+            {
+              label: "Slowest Resolution",
+              value: `${resolutionData.slowestResolution.toFixed(1)} days`,
+            },
+          ];
+          analytics.insights = [
+            `Average resolution time: ${resolutionData.avgResolutionTime.toFixed(1)} days`,
+            `${resolutionData.percentageUnderDay.toFixed(1)}% of tickets resolved within 24 hours`,
+            `Fastest resolution: ${resolutionData.fastestResolution.toFixed(1)} days`,
+            `Slowest resolution: ${resolutionData.slowestResolution.toFixed(1)} days`,
+          ];
+          aiExplanation = `Analysis of ticket resolution times shows an average resolution time of ${resolutionData.avgResolutionTime.toFixed(1)} days. ${resolutionData.percentageUnderDay.toFixed(1)}% of tickets are resolved within 24 hours, indicating ${resolutionData.percentageUnderDay > 50 ? 'good efficiency in handling most tickets' : 'potential areas for improvement in resolution speed'}. The range from ${resolutionData.fastestResolution.toFixed(1)} to ${resolutionData.slowestResolution.toFixed(1)} days suggests ${(resolutionData.slowestResolution - resolutionData.fastestResolution) > 7 ? 'significant variation in resolution times that may need attention' : 'relatively consistent handling of tickets'}.`;
+        } else if (metric === ANALYTICS_METRICS.satisfaction) {
+          const satisfactionData = rawAnalytics as SatisfactionAnalytics;
+          analytics.summaryMetrics = [
+            {
+              label: "Average Rating",
+              value: `${satisfactionData.avgRating.toFixed(1)}/5`,
+            },
+            {
+              label: "High Satisfaction",
+              value: `${satisfactionData.percentageHigh.toFixed(1)}%`,
+            },
+            {
+              label: "Low Satisfaction",
+              value: `${satisfactionData.percentageLow.toFixed(1)}%`,
+            },
+          ];
+          analytics.insights = [
+            `Average satisfaction rating: ${satisfactionData.avgRating.toFixed(1)}/5`,
+            `${satisfactionData.percentageHigh.toFixed(1)}% high satisfaction ratings (4-5)`,
+            `${satisfactionData.percentageLow.toFixed(1)}% low satisfaction ratings (1-2)`,
+          ];
+          aiExplanation = `Customer satisfaction analysis reveals an average rating of ${satisfactionData.avgRating.toFixed(1)}/5. ${satisfactionData.percentageHigh.toFixed(1)}% of customers gave high ratings (4-5), while ${satisfactionData.percentageLow.toFixed(1)}% reported low satisfaction (1-2). This indicates ${satisfactionData.avgRating >= 4 ? 'strong overall customer satisfaction' : satisfactionData.avgRating >= 3 ? 'moderate satisfaction with room for improvement' : 'significant challenges in meeting customer expectations'}. The distribution suggests ${satisfactionData.percentageHigh > 70 ? 'consistently positive customer experiences' : 'areas needing attention to improve customer satisfaction'}.`;
+        } else if (metric === ANALYTICS_METRICS.ticket_trends) {
+          const trendsData = rawAnalytics as TicketTrendsAnalytics;
+          analytics.summaryMetrics = [
+            {
+              label: "Total Tickets",
+              value: trendsData.totalTickets.toString(),
+            },
+            {
+              label: "Average per Period",
+              value: trendsData.avgTicketsPerPeriod.toFixed(1),
+            },
+            {
+              label: "Peak Volume",
+              value: trendsData.maxTicketsInPeriod.toString(),
+            },
+          ];
+          analytics.insights = [
+            `Total tickets: ${trendsData.totalTickets}`,
+            `Average ${trendsData.avgTicketsPerPeriod.toFixed(1)} tickets per period`,
+            `Peak volume: ${trendsData.maxTicketsInPeriod} tickets`,
+          ];
+          aiExplanation = `Ticket volume trend analysis shows a total of ${trendsData.totalTickets} tickets, with an average of ${trendsData.avgTicketsPerPeriod.toFixed(1)} tickets per period. Peak volume reached ${trendsData.maxTicketsInPeriod} tickets, which is ${((trendsData.maxTicketsInPeriod / trendsData.avgTicketsPerPeriod - 1) * 100).toFixed(1)}% above average. This pattern indicates ${trendsData.maxTicketsInPeriod > trendsData.avgTicketsPerPeriod * 1.5 ? 'significant volume fluctuations that may require dynamic resource allocation' : 'relatively stable ticket volumes with predictable patterns'}.`;
+        } else if (metric === ANALYTICS_METRICS.agent_performance) {
+          const performanceData = rawAnalytics as ResolutionTimeAnalytics;
+          analytics.summaryMetrics = [
+            {
+              label: "Average Resolution Time",
+              value: `${performanceData.avgResolutionTime.toFixed(1)} days`,
+            },
+            {
+              label: "Best Performance",
+              value: `${performanceData.fastestResolution.toFixed(1)} days`,
+            },
+            {
+              label: "Needs Improvement",
+              value: `${performanceData.slowestResolution.toFixed(1)} days`,
+            },
+          ];
+          analytics.insights = [
+            `Team average resolution time: ${performanceData.avgResolutionTime.toFixed(1)} days`,
+            `Best performing agents resolve tickets in ${performanceData.fastestResolution.toFixed(1)} days`,
+            `Some tickets take up to ${performanceData.slowestResolution.toFixed(1)} days to resolve`,
+            `${performanceData.percentageUnderDay.toFixed(1)}% of tickets resolved within 24 hours`,
+          ];
+          aiExplanation = `Agent performance analysis shows varying levels of efficiency across the team. The average resolution time is ${performanceData.avgResolutionTime.toFixed(1)} days, with top performers resolving tickets in ${performanceData.fastestResolution.toFixed(1)} days. ${performanceData.percentageUnderDay.toFixed(1)}% of tickets are handled within 24 hours, indicating ${performanceData.percentageUnderDay > 60 ? 'strong overall team performance' : 'opportunities for performance improvement'}. The significant range between fastest (${performanceData.fastestResolution.toFixed(1)} days) and slowest (${performanceData.slowestResolution.toFixed(1)} days) resolutions suggests potential for knowledge sharing and process standardization to improve team-wide efficiency.`;
         }
+
+        // Add the AI explanation to the analytics object
+        analytics.aiExplanation = aiExplanation;
 
         return {
           type: "analytics",
@@ -575,7 +657,7 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
         }
 
         // Generate report sections with visualizations
-        const generatedReport: ReportData = {
+        const reportData: ReportData = {
           datasetId,
           reportType,
           metrics,
@@ -668,7 +750,7 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
 
         return {
           type: "report" as const,
-          data: generatedReport,
+          data: reportData,
         };
       } catch (error) {
         console.error(`Error generating report:`, error);
@@ -721,7 +803,9 @@ const detectIntent = async (message: string) => {
   if (
     lowerMessage.includes("resolution time") ||
     lowerMessage.includes("agent performance") ||
-    (lowerMessage.includes("time") && lowerMessage.includes("resolve"))
+    (lowerMessage.includes("time") && lowerMessage.includes("resolve")) ||
+    lowerMessage.includes("agent metrics") ||
+    lowerMessage.includes("performance metrics")
   ) {
     return {
       intent: "show_analytics",
@@ -747,7 +831,8 @@ const detectIntent = async (message: string) => {
     lowerMessage.includes("satisfaction") ||
     lowerMessage.includes("rating") ||
     lowerMessage.includes("csat") ||
-    lowerMessage.includes("happy")
+    lowerMessage.includes("happy") ||
+    lowerMessage.includes("satisfaction scores")
   ) {
     return {
       intent: "show_analytics",
@@ -1024,7 +1109,14 @@ const handleError = (error: unknown): ErrorUIData => {
 
 // Update report generation to use proper types
 const generateReport = async (datasetId: string, reportType: string, metrics: string[]): Promise<ReportUIData> => {
-  // ... existing report generation code ...
+  const reportData: ReportData = {
+    datasetId,
+    reportType,
+    metrics,
+    generated: new Date().toISOString(),
+    sections: [],
+  };
+
   return {
     type: "report",
     data: reportData,
