@@ -2,6 +2,7 @@ import "@/app/(preview)/globals.css";
 import { Metadata } from "next";
 import { Toaster } from "sonner";
 import { AI } from "@/app/(preview)/actions";
+import { Navbar } from "@/components/Navbar";
 
 export const metadata: Metadata = {
   title: 'CSV Analysis',

@@ -23,14 +23,8 @@ import {
   UIState, 
   UIMessage, 
   MessageRole,
-  UIComponentData,
-  AnalyticsData,
-  Dataset,
-  DatasetSummary,
-  QueryResult,
-  ReportData,
-  ErrorUIData,
-  ReportUIData
+  StreamableUIProps,
+  StreamableValue
 } from "@/types/chat";
 
 // Initialize OpenAI client
@@ -73,8 +67,25 @@ const ANALYTICS_QUERIES = {
   },
 } as const;
 
+// Interface for analytics data
+interface AnalyticsData {
+  title: string;
+  description: string;
+  summaryMetrics: Array<{ label: string; value: string }>;
+  insights: Array<string>;
+  data: any[];
+}
+
+// Interface for dataset
+interface Dataset {
+  id: string;
+  name: string;
+  recordCount: number;
+  createdAt: string;
+}
+
 // Interface for dataset summary
-export interface DatasetSummary {
+interface DatasetSummary {
   id: string;
   name: string;
   description?: string;
@@ -92,47 +103,92 @@ export interface DatasetSummary {
 }
 
 // Interface for query results
-export interface QueryResult {
+interface QueryResult {
   chartType?: "bar" | "line" | "pie" | "table";
   data: any[];
   summary: string;
   insights: Array<string>;
+  aiExplanation: string;
 }
 
-// Interface for analytics data
-export interface AnalyticsData {
+// Add interface for report data
+interface ReportSection {
   title: string;
-  description: string;
-  summaryMetrics: Array<{ label: string; value: string }>;
-  insights: Array<string>;
-  data: any[];
+  content: string;
+  visualization?: {
+    chartType: "bar" | "line" | "pie" | "table";
+    data: any[];
+    summary: string;
+    insights: string[];
+    aiExplanation?: string;
+  };
 }
 
-// Interface for report data
-export interface ReportData {
+interface ReportData {
   datasetId: string;
   reportType: string;
   metrics: string[];
   generated: string;
-  sections: Array<{
-    title: string;
-    content: string;
-    visualization?: {
-      chartType: "bar" | "line" | "pie" | "table";
-      data: any[];
-      summary: string;
-      insights: string[];
-    };
-  }>;
+  sections: ReportSection[];
 }
 
-// Interface for dataset
-export interface Dataset {
-  id: string;
-  name: string;
-  recordCount: number;
-  createdAt: string;
+// Define UI component types
+type UIComponentType = 
+  | "analytics"
+  | "dataset-upload"
+  | "dataset-list"
+  | "dataset-summary"
+  | "data-visualization"
+  | "error"
+  | "report";
+
+interface BaseUIComponent {
+  type: UIComponentType;
 }
+
+interface AnalyticsUIData extends BaseUIComponent {
+  type: "analytics";
+  data: AnalyticsData;
+  metric: string;
+}
+
+interface DatasetUploadUIData extends BaseUIComponent {
+  type: "dataset-upload";
+}
+
+interface DatasetListUIData extends BaseUIComponent {
+  type: "dataset-list";
+  data: Dataset[];
+}
+
+interface DatasetSummaryUIData extends BaseUIComponent {
+  type: "dataset-summary";
+  data: DatasetSummary;
+}
+
+interface DataVisualizerUIData extends BaseUIComponent {
+  type: "data-visualization";
+  data: QueryResult;
+}
+
+interface ErrorUIData extends BaseUIComponent {
+  type: "error";
+  message: string;
+}
+
+interface ReportUIData extends BaseUIComponent {
+  type: "report";
+  data: ReportData;
+}
+
+type UIComponentData = 
+  | AnalyticsUIData 
+  | DatasetUploadUIData 
+  | DatasetListUIData 
+  | DatasetSummaryUIData 
+  | DataVisualizerUIData 
+  | ErrorUIData 
+  | ReportUIData;
 
 // Add these interfaces near the top with other interfaces
 interface BaseAnalyticsResult {
@@ -176,6 +232,23 @@ type AnalyticsResult =
   | IssueDistributionAnalytics
   | TicketTrendsAnalytics;
 
+// Add type guard functions
+function isResolutionTimeAnalytics(data: AnalyticsResult): data is ResolutionTimeAnalytics {
+  return 'avgResolutionTime' in data && 'fastestResolution' in data;
+}
+
+function isSatisfactionAnalytics(data: AnalyticsResult): data is SatisfactionAnalytics {
+  return 'avgRating' in data && 'ratingDistribution' in data;
+}
+
+function isIssueDistributionAnalytics(data: AnalyticsResult): data is IssueDistributionAnalytics {
+  return 'issueDistribution' in data && 'topIssue' in data;
+}
+
+function isTicketTrendsAnalytics(data: AnalyticsResult): data is TicketTrendsAnalytics {
+  return 'totalTickets' in data && 'avgTicketsPerPeriod' in data;
+}
+
 // Helper function to get metric title
 const getMetricTitle = (metric: string) => {
   switch (metric) {
@@ -193,51 +266,6 @@ const getMetricTitle = (metric: string) => {
       return metric;
   }
 };
-
-// Update the interfaces at the top
-interface AnalyticsUIData {
-  type: "analytics";
-  data: AnalyticsData;
-  metric: string;
-}
-
-interface DatasetUploadUIData {
-  type: "dataset-upload";
-}
-
-interface DatasetListUIData {
-  type: "dataset-list";
-  data: Dataset[];
-}
-
-interface DatasetSummaryUIData {
-  type: "dataset-summary";
-  data: DatasetSummary;
-}
-
-interface DataVisualizerUIData {
-  type: "data-visualization";
-  data: QueryResult;
-}
-
-interface ErrorUIData {
-  type: "error";
-  message: string;
-}
-
-interface ReportUIData {
-  type: "report";
-  data: ReportData;
-}
-
-type UIComponentData = 
-  | AnalyticsUIData 
-  | DatasetUploadUIData 
-  | DatasetListUIData 
-  | DatasetSummaryUIData 
-  | DataVisualizerUIData 
-  | ErrorUIData 
-  | ReportUIData;
 
 // Helper function for word capitalization
 const capitalizeWord = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
@@ -465,17 +493,26 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
       try {
         const { datasetId, query, chartType } = args;
         if (!datasetId) {
-          throw new Error("Dataset ID is required");
+          return {
+            type: "error" as const,
+            message: "Dataset ID is required",
+          };
         }
 
         if (!query) {
-          throw new Error("Query is required");
+          return {
+            type: "error" as const,
+            message: "Query is required",
+          };
         }
 
         const result = await analyzeDataByQuery(datasetId, query, chartType);
 
         if (!result) {
-          throw new Error("Failed to retrieve visualization data");
+          return {
+            type: "error" as const,
+            message: "Failed to retrieve visualization data",
+          };
         }
 
         // Validate and ensure result has the expected structure
@@ -487,16 +524,19 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
           data: Array.isArray(result.data) ? result.data : [],
           summary: result.summary || "No summary available",
           insights: Array.isArray(result.insights) ? result.insights : [],
+          aiExplanation: result.aiExplanation || "No AI explanation available"
         };
 
+        console.log("Analysis result with AI explanation:", validatedResult);
+
         return {
-          type: "data-visualization",
+          type: "data-visualization" as const,
           data: validatedResult,
         };
       } catch (error) {
         console.error(`Error visualizing data:`, error);
         return {
-          type: "error",
+          type: "error" as const,
           message: `Failed to visualize data. Please verify the query and try again.`,
         };
       }
@@ -505,25 +545,37 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
       try {
         const { datasetId, reportType, metrics } = args;
         if (!datasetId) {
-          throw new Error("Dataset ID is required");
+          return {
+            type: "error" as const,
+            message: "Dataset ID is required",
+          };
         }
 
         if (!reportType) {
-          throw new Error("Report type is required");
+          return {
+            type: "error" as const,
+            message: "Report type is required",
+          };
         }
 
         if (!metrics || !Array.isArray(metrics) || metrics.length === 0) {
-          throw new Error("At least one metric must be specified");
+          return {
+            type: "error" as const,
+            message: "At least one metric must be specified",
+          };
         }
 
         // Validate dataset exists
         const dataset = await getDatasetById(datasetId);
         if (!dataset) {
-          throw new Error(`Dataset with ID ${datasetId} not found`);
+          return {
+            type: "error" as const,
+            message: `Dataset with ID ${datasetId} not found`,
+          };
         }
 
         // Generate report sections with visualizations
-        const reportData = {
+        const generatedReport: ReportData = {
           datasetId,
           reportType,
           metrics,
@@ -531,11 +583,17 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
           sections: await Promise.all(
             metrics.map(async (metric) => {
               try {
+                // Map the frontend metric to the backend metric
+                const queryConfig = ANALYTICS_QUERIES[metric as keyof typeof ANALYTICS_METRICS];
+                if (!queryConfig) {
+                  throw new Error(`No query configuration found for metric: ${metric}`);
+                }
+
                 // Get analytics data for the metric
                 const metricData = await getTicketAnalytics(
                   datasetId,
-                  metric,
-                  undefined
+                  queryConfig.metric,
+                  queryConfig.groupBy
                 ) as AnalyticsResult;
 
                 if (!metricData) {
@@ -545,70 +603,43 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
                   };
                 }
 
-                // Determine chart type based on metric
-                let chartType: "bar" | "line" | "pie" | "table" = "bar";
-                switch (metric) {
-                  case ANALYTICS_METRICS.satisfaction:
-                    chartType = "pie";
-                    break;
-                  case ANALYTICS_METRICS.ticket_trends:
-                    chartType = "line";
-                    break;
-                  case ANALYTICS_METRICS.agent_performance:
-                    chartType = "table";
-                    break;
-                  case ANALYTICS_METRICS.issue_distribution:
-                    chartType = "pie";
-                    break;
-                  default:
-                    chartType = "bar";
-                }
-
                 // Format content based on metric type
                 let content = "";
                 let insights: string[] = [];
+                let chartType: "bar" | "line" | "pie" | "table" = queryConfig.chartType || "bar";
+                let data: any[] = [];
 
-                switch (metric) {
-                  case ANALYTICS_METRICS.resolution_time:
-                    const resData = metricData as ResolutionTimeAnalytics;
-                    content = `Average resolution time is ${resData.avgResolutionTime.toFixed(1)} days. ${resData.percentageUnderDay.toFixed(1)}% of tickets are resolved within a day.`;
-                    insights = [
-                      `Fastest resolution: ${resData.fastestResolution.toFixed(1)} days`,
-                      `Slowest resolution: ${resData.slowestResolution.toFixed(1)} days`,
-                      `${resData.percentageUnderDay.toFixed(1)}% of tickets resolved in under 24 hours`,
-                    ];
-                    break;
-
-                  case ANALYTICS_METRICS.satisfaction:
-                    const satData = metricData as SatisfactionAnalytics;
-                    content = `Overall customer satisfaction rating is ${satData.avgRating.toFixed(1)}/5.`;
-                    insights = [
-                      `${satData.percentageHigh.toFixed(1)}% of tickets received high satisfaction ratings (4-5)`,
-                      `${satData.percentageLow.toFixed(1)}% of tickets received low satisfaction ratings (1-2)`,
-                    ];
-                    break;
-
-                  case ANALYTICS_METRICS.issue_distribution:
-                    const issueData = metricData as IssueDistributionAnalytics;
-                    content = `Analysis of issue distribution across ${issueData.issueDistribution.length} different categories.`;
-                    insights = [
-                      `Most common issue: ${issueData.topIssue.type} with ${issueData.topIssue.count} tickets`,
-                      `Top category: ${issueData.categories[0].name} with ${issueData.categories[0].count} tickets`,
-                    ];
-                    break;
-
-                  case ANALYTICS_METRICS.ticket_trends:
-                    const trendData = metricData as TicketTrendsAnalytics;
-                    content = `Analysis of ticket volume trends over time. Total of ${trendData.totalTickets} tickets analyzed.`;
-                    insights = [
-                      `Average of ${trendData.avgTicketsPerPeriod.toFixed(1)} tickets per period`,
-                      `Peak volume of ${trendData.maxTicketsInPeriod} tickets in a single period`,
-                    ];
-                    break;
-
-                  default:
-                    content = `Analysis based on ${dataset.name} dataset shows significant trends in ${metric}.`;
-                    insights = metricData.insights || [];
+                if (isResolutionTimeAnalytics(metricData)) {
+                  content = `Average resolution time is ${metricData.avgResolutionTime.toFixed(1)} days. ${metricData.percentageUnderDay.toFixed(1)}% of tickets are resolved within a day.`;
+                  insights = [
+                    `Fastest resolution: ${metricData.fastestResolution.toFixed(1)} days`,
+                    `Slowest resolution: ${metricData.slowestResolution.toFixed(1)} days`,
+                    `${metricData.percentageUnderDay.toFixed(1)}% of tickets resolved in under 24 hours`,
+                  ];
+                  data = metricData.data;
+                } else if (isSatisfactionAnalytics(metricData)) {
+                  content = `Overall customer satisfaction rating is ${metricData.avgRating.toFixed(1)}/5.`;
+                  insights = [
+                    `${metricData.percentageHigh.toFixed(1)}% of tickets received high satisfaction ratings (4-5)`,
+                    `${metricData.percentageLow.toFixed(1)}% of tickets received low satisfaction ratings (1-2)`,
+                  ];
+                  data = metricData.ratingDistribution;
+                } else if (isIssueDistributionAnalytics(metricData)) {
+                  content = `Analysis of issue distribution across ${metricData.issueDistribution.length} different categories.`;
+                  insights = [
+                    `Most common issue: ${metricData.topIssue.type} with ${metricData.topIssue.count} tickets`,
+                    `Top category: ${metricData.categories[0].name} with ${metricData.categories[0].count} tickets`,
+                  ];
+                  data = metricData.issueDistribution;
+                  chartType = "pie";
+                } else if (isTicketTrendsAnalytics(metricData)) {
+                  content = `Analysis of ticket volume trends over time. Total of ${metricData.totalTickets} tickets analyzed.`;
+                  insights = [
+                    `Average of ${metricData.avgTicketsPerPeriod.toFixed(1)} tickets per period`,
+                    `Peak volume of ${metricData.maxTicketsInPeriod} tickets in a single period`,
+                  ];
+                  data = metricData.data;
+                  chartType = "line";
                 }
 
                 return {
@@ -616,13 +647,16 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
                   content,
                   visualization: {
                     chartType,
-                    data: metricData.data,
+                    data,
                     summary: content,
                     insights,
+                    aiExplanation: `Based on the ${reportType.toLowerCase()} analysis of ${metric.replace(/_/g, ' ')}, ` +
+                      `the data shows ${content.toLowerCase()} ` +
+                      `Key findings include: ${insights.map(i => i.toLowerCase()).join('. ')}.`
                   },
                 };
               } catch (error) {
-                console.warn(`Failed to get data for metric ${metric}:`, error);
+                console.error(`Failed to get data for metric ${metric}:`, error);
                 return {
                   title: toTitleCase(metric),
                   content: "Unable to retrieve data for this metric.",
@@ -633,19 +667,22 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
         };
 
         return {
-          type: "report",
-          data: reportData,
+          type: "report" as const,
+          data: generatedReport,
         };
       } catch (error) {
         console.error(`Error generating report:`, error);
         return {
-          type: "error",
+          type: "error" as const,
           message: `Failed to generate report. Please verify the parameters and try again.`,
         };
       }
 
     default:
-      throw new Error(`Unknown tool: ${toolName}`);
+      return {
+        type: "error" as const,
+        message: `Unknown tool: ${toolName}`,
+      };
   }
 };
 
@@ -739,8 +776,13 @@ const detectIntent = async (message: string) => {
   };
 };
 
-// Function to handle user message
-const handleUserMessage = async (message: string) => {
+// Add type guard for error responses
+function isErrorResponse(response: UIComponentData): response is ErrorUIData {
+  return response.type === "error";
+}
+
+// Update the handleUserMessage function to handle undefined values
+const handleUserMessage = async (message: string): Promise<UIComponentData | undefined> => {
   // First, detect the user's intent
   const intent = await detectIntent(message);
   console.log("Detected intent:", intent);
@@ -763,7 +805,7 @@ const handleUserMessage = async (message: string) => {
       const datasets = await getDatasetList();
       if (!datasets || datasets.length === 0) {
         return {
-          type: "error",
+          type: "error" as const,
           message: "No datasets found. Please upload a dataset first.",
         };
       }
@@ -782,7 +824,7 @@ const handleUserMessage = async (message: string) => {
       const availableDatasets = await getDatasetList();
       if (!availableDatasets || availableDatasets.length === 0) {
         return {
-          type: "error",
+          type: "error" as const,
           message: "No datasets found. Please upload a dataset first.",
         };
       }
@@ -791,20 +833,27 @@ const handleUserMessage = async (message: string) => {
       const currentDatasetId = availableDatasets[0].id;
 
       // Analyze the data based on the query
+      if (!intent.query) {
+        return {
+          type: "error" as const,
+          message: "No query provided for analysis.",
+        };
+      }
+
       const result = await analyzeDataByQuery(currentDatasetId, intent.query);
       
       return {
-        type: "data-visualization",
+        type: "data-visualization" as const,
         data: result,
       };
 
     default:
       // Default to chat using LLM
-      return null;
+      return undefined;
   }
 };
 
-// Main function to send and process messages
+// Update the sendMessage function to handle errors
 const sendMessage = async (message: string) => {
   "use server";
 
@@ -856,42 +905,44 @@ const sendMessage = async (message: string) => {
 
     // If not handled by a tool, proceed with normal chat using OpenAI
     console.log("Processing with LLM chat...");
-    const { value: stream } = await createStreamableUI(async ({ content, done }: StreamableUIProps) => {
-      const textContent = Array.isArray(content)
-        ? content
-            .map((part) =>
-              typeof part === "string" ? part : JSON.stringify(part)
-            )
-            .join("")
-        : typeof content === "string"
-        ? content
-        : JSON.stringify(content);
+    const { value: stream } = await createStreamableUI(
+      async (props: StreamableUIProps) => {
+        const textContent = Array.isArray(props.content)
+          ? props.content
+              .map((part) =>
+                typeof part === "string" ? part : JSON.stringify(part)
+              )
+              .join("")
+          : typeof props.content === "string"
+          ? props.content
+          : JSON.stringify(props.content);
 
-      if (done) {
-        const assistantMessage: CoreMessage = {
-          role: "assistant",
-          content: textContent,
-        };
+        if (props.done) {
+          const assistantMessage: CoreMessage = {
+            role: "assistant",
+            content: textContent,
+          };
 
-        const assistantUIMessage: UIMessage = {
-          id: generateId(),
-          role: "assistant",
-          content: textContent,
-        };
+          const assistantUIMessage: UIMessage = {
+            id: generateId(),
+            role: "assistant",
+            content: textContent,
+          };
 
-        aiState.done({
-          ...aiState.get(),
-          messages: [...currentAIMessages, userMessage, assistantMessage],
-          uiState: {
-            messages: [...currentUIState, userUIMessage, assistantUIMessage],
-          },
-        });
+          aiState.done({
+            ...aiState.get(),
+            messages: [...currentAIMessages, userMessage, assistantMessage],
+            uiState: {
+              messages: [...currentUIState, userUIMessage, assistantUIMessage],
+            },
+          });
 
-        return <Message role="assistant" content={textContent} />;
-      } else {
-        return <TextStreamMessage content={textContent} />;
+          return <Message role="assistant" content={textContent} />;
+        } else {
+          return <TextStreamMessage content={textContent} />;
+        }
       }
-    });
+    );
 
     return stream;
   } catch (error) {
@@ -911,7 +962,7 @@ const sendMessage = async (message: string) => {
       role: "assistant",
       content: errorContent,
       ui: {
-        type: "error",
+        type: "error" as const,
         message: errorMessage,
       },
     };

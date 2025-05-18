@@ -182,6 +182,9 @@ export async function analyzeDataByQuery(
 ) {
   const lowerQuery = query.toLowerCase();
   
+  // Initialize chart type
+  let recommendedChartType = chartType === 'auto' ? 'bar' : chartType;
+  
   // Get basic ticket stats
   const totalTickets = await db.ticket.count({ 
     where: { datasetId } 
@@ -233,66 +236,168 @@ export async function analyzeDataByQuery(
     take: 5
   });
 
-  // Format data for visualization
-  let data = [
-    { name: 'Total Tickets', value: totalTickets },
-    { name: 'Resolved', value: resolvedTickets },
-    { name: 'Pending', value: totalTickets - resolvedTickets }
-  ];
+  // Get agent performance data
+  const agentPerformance = await db.ticket.groupBy({
+    by: ['agentId'],
+    where: { datasetId },
+    _avg: {
+      resolutionTime: true,
+      satisfactionRate: true
+    },
+    _count: true
+  });
 
-  // Generate comprehensive summary
-  const summary = [
-    `Analysis of ${totalTickets} total tickets shows ${resolvedTickets} (${((resolvedTickets/totalTickets)*100).toFixed(1)}%) have been resolved.`,
-    `Average resolution time is ${resolutionStats._avg.resolutionTime?.toFixed(1) || 'N/A'} days.`,
-    `Customer satisfaction averages ${satisfactionStats._avg.satisfactionRate?.toFixed(1) || 'N/A'}/5.`
-  ].join(' ');
+  // Format data and generate analysis based on query type
+  let data = [];
+  let summary = '';
+  let insights: string[] = [];
 
-  // Generate detailed insights
-  const insights = [
-    // Ticket Volume Insights
-    `${((resolvedTickets / totalTickets) * 100).toFixed(1)}% of tickets are resolved`,
-    `${totalTickets - resolvedTickets} tickets are pending resolution`,
-    
-    // Resolution Time Insights
-    `Fastest resolution: ${resolutionStats._min.resolutionTime?.toFixed(1) || 'N/A'} days`,
-    `Slowest resolution: ${resolutionStats._max.resolutionTime?.toFixed(1) || 'N/A'} days`,
-    `Average resolution time: ${resolutionStats._avg.resolutionTime?.toFixed(1) || 'N/A'} days`,
-    
-    // Satisfaction Insights
-    `Highest satisfaction rating: ${satisfactionStats._max.satisfactionRate?.toFixed(1) || 'N/A'}/5`,
-    `Lowest satisfaction rating: ${satisfactionStats._min.satisfactionRate?.toFixed(1) || 'N/A'}/5`,
-    `Average satisfaction rating: ${satisfactionStats._avg.satisfactionRate?.toFixed(1) || 'N/A'}/5`,
-    
-    // Priority Distribution
-    ...priorityDist.map(p => 
-      `${p.priority} priority: ${p._count} tickets (${((p._count/totalTickets)*100).toFixed(1)}%)`
-    ),
-    
-    // Top Issues
-    ...issueTypes.map(issue => 
-      `Issue type "${issue.issueType}": ${issue._count} tickets`
-    )
-  ];
-
-  // Determine chart type based on query content
-  let recommendedChartType = chartType;
+  // Determine chart type based on query content if auto
   if (chartType === 'auto') {
-    if (lowerQuery.includes('distribution') || lowerQuery.includes('breakdown')) {
+    if (lowerQuery.includes('distribution') || lowerQuery.includes('breakdown') || lowerQuery.includes('type')) {
       recommendedChartType = 'pie';
     } else if (lowerQuery.includes('trend') || lowerQuery.includes('over time')) {
       recommendedChartType = 'line';
-    } else if (lowerQuery.includes('compare') || lowerQuery.includes('comparison')) {
-      recommendedChartType = 'bar';
-    } else {
+    } else if (lowerQuery.includes('compare') || lowerQuery.includes('performance')) {
       recommendedChartType = 'bar';
     }
   }
+
+  if (lowerQuery.includes('ticket') && (lowerQuery.includes('status') || lowerQuery.includes('resolved'))) {
+    // Ticket status analysis
+    data = [
+      { name: 'Total Tickets', value: totalTickets },
+      { name: 'Resolved', value: resolvedTickets },
+      { name: 'Pending', value: totalTickets - resolvedTickets }
+    ];
+    
+    const resolutionRate = (resolvedTickets / totalTickets) * 100;
+    summary = `Analysis of ${totalTickets} total tickets shows ${resolvedTickets} (${resolutionRate.toFixed(1)}%) have been resolved. ` +
+      `The average resolution time is ${resolutionStats._avg.resolutionTime?.toFixed(1) || 'N/A'} days.`;
+    
+    insights = [
+      `Resolution rate: ${resolutionRate.toFixed(1)}%`,
+      `${totalTickets - resolvedTickets} tickets are still pending`,
+      `Average resolution time: ${resolutionStats._avg.resolutionTime?.toFixed(1) || 'N/A'} days`,
+      `Fastest resolution: ${resolutionStats._min.resolutionTime?.toFixed(1) || 'N/A'} days`,
+      `Slowest resolution: ${resolutionStats._max.resolutionTime?.toFixed(1) || 'N/A'} days`
+    ];
+
+    recommendedChartType = 'bar';
+  } else if (lowerQuery.includes('issue') || lowerQuery.includes('type')) {
+    // Issue type analysis
+    data = issueTypes.map(issue => ({
+      name: issue.issueType,
+      value: issue._count
+    }));
+
+    const topIssue = data[0];
+    const totalIssues = data.reduce((sum, d) => sum + d.value, 0);
+    
+    summary = `Analysis of issue types shows "${topIssue.name}" as the most common, accounting for ` +
+      `${((topIssue.value/totalIssues)*100).toFixed(1)}% of all tickets. ` +
+      `The top 3 issues account for ${((data.slice(0,3).reduce((sum, d) => sum + d.value, 0)/totalIssues)*100).toFixed(1)}% of tickets.`;
+    
+    insights = [
+      `Most common issue: ${topIssue.name} (${topIssue.value} tickets)`,
+      `${data.length} distinct issue types identified`,
+      `Top 3 issues account for ${((data.slice(0,3).reduce((sum, d) => sum + d.value, 0)/totalIssues)*100).toFixed(1)}% of tickets`,
+      ...data.slice(0,3).map(d => `${d.name}: ${d.value} tickets (${((d.value/totalIssues)*100).toFixed(1)}%)`)
+    ];
+
+    recommendedChartType = 'pie';
+  } else if (lowerQuery.includes('agent') || lowerQuery.includes('performance')) {
+    // Agent performance analysis
+    data = agentPerformance.map(agent => ({
+      name: `Agent ${agent.agentId}`,
+      resolutionTime: agent._avg.resolutionTime || 0,
+      satisfaction: agent._avg.satisfactionRate || 0,
+      tickets: agent._count
+    })).sort((a, b) => (b.satisfaction - a.satisfaction));
+
+    const topAgent = data[0];
+    const avgResolution = data.reduce((sum, agent) => sum + agent.resolutionTime, 0) / data.length;
+    
+    summary = `Analysis of ${data.length} agents shows varying performance levels. ` +
+      `Top performing Agent ${topAgent.name} has an average satisfaction rating of ${topAgent.satisfaction.toFixed(1)}/5 ` +
+      `and resolves tickets in ${topAgent.resolutionTime.toFixed(1)} days on average.`;
+    
+    insights = [
+      `Top agent: ${topAgent.name} (${topAgent.satisfaction.toFixed(1)}/5 satisfaction)`,
+      `Team average resolution time: ${avgResolution.toFixed(1)} days`,
+      `Agents handling most tickets: ${data.slice(0, 3).map(a => a.name).join(', ')}`,
+      `${data.filter(a => a.satisfaction >= 4).length} agents maintain 4+ satisfaction rating`
+    ];
+
+    recommendedChartType = 'bar';
+  } else if (lowerQuery.includes('satisfaction') || lowerQuery.includes('rating')) {
+    // Satisfaction analysis
+    const ratingCounts = await db.ticket.groupBy({
+      by: ['satisfactionRate'],
+      where: { datasetId },
+      _count: true
+    });
+
+    data = ratingCounts.map(rate => ({
+      name: `${rate.satisfactionRate} Stars`,
+      value: rate._count
+    })).sort((a, b) => parseInt(a.name) - parseInt(b.name));
+
+    const highSatisfaction = data.filter(d => parseInt(d.name) >= 4).reduce((sum, d) => sum + d.value, 0);
+    const totalRated = data.reduce((sum, d) => sum + d.value, 0);
+    
+    summary = `Customer satisfaction analysis shows an average rating of ${satisfactionStats._avg.satisfactionRate?.toFixed(1)}/5. ` +
+      `${((highSatisfaction/totalRated)*100).toFixed(1)}% of tickets received high satisfaction ratings (4-5 stars).`;
+    
+    insights = [
+      `Average satisfaction: ${satisfactionStats._avg.satisfactionRate?.toFixed(1)}/5`,
+      `Highest rating: ${satisfactionStats._max.satisfactionRate}/5`,
+      `Lowest rating: ${satisfactionStats._min.satisfactionRate}/5`,
+      `${((highSatisfaction/totalRated)*100).toFixed(1)}% tickets rated 4+ stars`,
+      `Most common rating: ${data.reduce((max, curr) => curr.value > max.value ? curr : max).name}`
+    ];
+
+    recommendedChartType = 'bar';
+  } else {
+    // Default to ticket status if query isn't specific
+    data = [
+      { name: 'Total Tickets', value: totalTickets },
+      { name: 'Resolved', value: resolvedTickets },
+      { name: 'Pending', value: totalTickets - resolvedTickets }
+    ];
+    
+    summary = `Analysis of ${totalTickets} total tickets shows ${resolvedTickets} (${((resolvedTickets/totalTickets)*100).toFixed(1)}%) have been resolved. ` +
+      `Average resolution time is ${resolutionStats._avg.resolutionTime?.toFixed(1)} days. ` +
+      `Customer satisfaction averages ${satisfactionStats._avg.satisfactionRate?.toFixed(1)}/5.`;
+    
+    insights = [
+      `${((resolvedTickets/totalTickets)*100).toFixed(1)}% tickets resolved`,
+      `${totalTickets - resolvedTickets} tickets pending`,
+      `Average resolution: ${resolutionStats._avg.resolutionTime?.toFixed(1)} days`,
+      `Customer satisfaction: ${satisfactionStats._avg.satisfactionRate?.toFixed(1)}/5`,
+      `Most common issue: ${issueTypes[0].issueType} (${issueTypes[0]._count} tickets)`
+    ];
+
+    recommendedChartType = 'bar';
+  }
+
+  // Generate AI explanation based on query type and results
+  const aiExplanation = generateAIExplanation(lowerQuery, data, summary, insights);
+
+  // Add logging to debug AI explanation generation
+  console.log("Generated AI Explanation:", {
+    query: lowerQuery,
+    summary,
+    insights: insights.slice(0, 3),
+    aiExplanation
+  });
 
   return {
     chartType: recommendedChartType,
     data,
     summary,
-    insights
+    insights,
+    aiExplanation
   };
 }
 
@@ -611,4 +716,59 @@ function getTimeframeFilter(timeframe: string) {
   
   // Default to no filter if timeframe is not recognized
   return {};
+}
+
+// Helper function for AI explanations
+function generateAIExplanation(query: string, data: any[], summary: string, insights: string[]): string {
+  // Add logging to debug the input parameters
+  console.log("Generating AI Explanation for:", {
+    query,
+    dataLength: data.length,
+    summaryPreview: summary.slice(0, 100),
+    insightsCount: insights.length
+  });
+
+  if (query.includes('ticket') && (query.includes('status') || query.includes('resolved'))) {
+    const resolutionRate = insights[0] ? parseInt(insights[0]) : 0;
+    return `Based on your query about ticket status, I analyzed the resolution patterns in your dataset. ` +
+           `The data reveals important insights about your team's ticket handling efficiency. ` +
+           `${summary} This suggests ${insights[0]?.toLowerCase() || 'varying resolution patterns'}. ` +
+           `Looking at the workload distribution, ${insights[1]?.toLowerCase() || 'there are some pending tickets'}. ` +
+           `The resolution metrics indicate that your team's performance is ${
+             (resolutionRate > 75) ? 'strong' : 'has room for improvement'
+           } in terms of ticket closure rates.`;
+  }
+  
+  if (query.includes('agent') || query.includes('performance')) {
+    return `I've conducted a detailed analysis of agent performance metrics based on your query. ` +
+           `${summary} The data highlights variations in individual agent effectiveness. ` +
+           `Notably, ${insights[0]?.toLowerCase() || 'there are variations in agent performance'}, while the team as a whole maintains ` +
+           `${insights[1]?.toLowerCase() || 'different resolution times'}. ` +
+           `The workload distribution shows that ${insights[2]?.toLowerCase() || 'there are variations in ticket handling'}, ` +
+           `suggesting potential opportunities for workload balancing.`;
+  }
+  
+  if (query.includes('satisfaction') || query.includes('rating')) {
+    const satisfactionRate = insights[3] ? parseInt(insights[3]) : 0;
+    return `I've analyzed your customer satisfaction data in detail. ` +
+           `${summary} The satisfaction trends reveal interesting patterns. ` +
+           `Most notably, ${insights[3]?.toLowerCase() || 'there are variations in satisfaction ratings'}, which indicates ` +
+           `${satisfactionRate > 70 ? 'strong customer satisfaction' : 'areas for potential improvement'}. ` +
+           `The distribution shows that ${insights[4]?.toLowerCase() || 'there are patterns in satisfaction ratings'}, ` +
+           `suggesting consistent service quality across most interactions.`;
+  }
+  
+  if (query.includes('issue') || query.includes('type')) {
+    return `I've performed a comprehensive analysis of your issue type distribution. ` +
+           `${summary} This analysis reveals key patterns in the types of issues your team handles. ` +
+           `Specifically, ${insights[0]?.toLowerCase() || 'there are various issue types'}, and interestingly, ` +
+           `${insights[2]?.toLowerCase() || 'there are patterns in issue distribution'}. This suggests that focusing resources on these ` +
+           `top issues could significantly impact overall service efficiency.`;
+  }
+  
+  // Default explanation
+  return `I've analyzed your ticket data to provide comprehensive insights. ` +
+         `${summary} The analysis reveals several key points: ` +
+         `${insights.slice(0, 3).map(insight => insight?.toLowerCase()).join(', ') || 'various patterns in the data'}. ` +
+         `These findings can help inform decisions about resource allocation and process improvements.`;
 }

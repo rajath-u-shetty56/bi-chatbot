@@ -105,6 +105,19 @@ export interface QueryResult {
   data: any[];
   summary: string;
   insights: Array<string>;
+  aiExplanation: string;
+  analysisPoints?: Array<{
+    title: string;
+    description: string;
+  }>;
+  trendAnalysis?: string;
+  impactAnalysis?: string;
+  recommendations?: string[];
+  metadata?: {
+    totalCount?: number;
+    categories?: number;
+    topItems?: Array<{ name: string; count: number; percentage: number }>;
+  };
 }
 
 export interface ReportData {
@@ -236,4 +249,14 @@ export type AnalyticsResult =
   | ResolutionTimeAnalytics
   | SatisfactionAnalytics
   | IssueDistributionAnalytics
-  | TicketTrendsAnalytics; 
+  | TicketTrendsAnalytics;
+
+// Add types for streamable UI
+export interface StreamableUIProps {
+  content: string | any[];
+  done: boolean;
+}
+
+export interface StreamableValue {
+  value: string;
+} 
