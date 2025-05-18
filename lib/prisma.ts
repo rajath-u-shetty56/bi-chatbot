@@ -358,6 +358,25 @@ export async function analyzeDataByQuery(
     ];
 
     recommendedChartType = 'bar';
+  } else if (lowerQuery.includes('resolution') || lowerQuery.includes('time')) {
+    // Resolution time analysis
+    const whereClause = { datasetId };
+    const resolutionData = await getResolutionTimeAnalytics(whereClause);
+    data = resolutionData.data;
+
+    const underDayPercentage = resolutionData.percentageUnderDay;
+    
+    summary = `Analysis shows an average resolution time of ${resolutionData.avgResolutionTime.toFixed(1)} days. ` +
+      `${underDayPercentage.toFixed(1)}% of tickets are resolved within 24 hours.`;
+    
+    insights = [
+      `Average resolution time: ${resolutionData.avgResolutionTime.toFixed(1)} days`,
+      `Fastest resolution: ${resolutionData.fastestResolution.toFixed(1)} days`,
+      `Slowest resolution: ${resolutionData.slowestResolution.toFixed(1)} days`,
+      `${underDayPercentage.toFixed(1)}% tickets resolved within 24 hours`
+    ];
+
+    recommendedChartType = 'line';
   } else {
     // Default to ticket status if query isn't specific
     data = [
@@ -485,11 +504,18 @@ async function getSatisfactionAnalytics(whereClause: any) {
   const percentageHigh = (highRatings / totalTickets) * 100;
   const percentageLow = (lowRatings / totalTickets) * 100;
   
+  // Format the data in the structure expected by the UI
+  const formattedData = distribution.map(item => ({
+    rating: item.rating,
+    count: item.count
+  }));
+  
   return {
     avgRating: satisfactionStats._avg.satisfactionRate || 0,
     percentageHigh,
     percentageLow,
-    ratingDistribution: distribution
+    ratingDistribution: distribution,
+    data: formattedData // Add the data property required by the interface
   };
 }
 

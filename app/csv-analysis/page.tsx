@@ -9,6 +9,7 @@ import { ChatActions, ChatTextMessage, MessageRole, UIMessage, UIComponentData }
 import { motion } from 'framer-motion';
 import { generateId } from 'ai';
 import { DataVisualizer } from '@/components/DataVisualizer';
+import { AnalyticsCard } from '@/components/AnalyticsCard';
 
 export default function CSVAnalysisPage() {
   const router = useRouter();
@@ -198,11 +199,21 @@ export default function CSVAnalysisPage() {
                 {message.ui.message}
               </div>
             )}
+            {message.ui.type === 'analytics' && (
+              <div className="bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden">
+                <AnalyticsCard 
+                  data={message.ui.data} 
+                  metric={message.ui.metric} 
+                />
+              </div>
+            )}
             {message.ui.type === 'data-visualization' && (
-              <DataVisualizer 
-                result={message.ui.data} 
-                query={message.content}
-              />
+              <div className="bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden">
+                <DataVisualizer 
+                  result={message.ui.data} 
+                  query={message.content}
+                />
+              </div>
             )}
           </div>
         )}

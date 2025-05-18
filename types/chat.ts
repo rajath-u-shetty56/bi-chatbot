@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { CoreMessage } from 'ai';
-import { ANALYTICS_METRICS } from '@/app/(preview)/actions';
+import { ANALYTICS_METRICS } from '@/lib/analytics';
 
 // Dataset types
 export interface Dataset {
@@ -106,7 +106,7 @@ export interface DatasetSummary {
 export type ChartType = "bar" | "line" | "pie" | "table";
 
 export interface QueryResult {
-  chartType?: ChartType;
+  chartType: ChartType;
   data: any[];
   summary: string;
   insights: Array<string>;
@@ -217,7 +217,6 @@ export interface ChatInputProps {
 // Analytics result types
 export interface BaseAnalyticsResult {
   data: any[];
-  insights?: string[];
 }
 
 export interface ResolutionTimeAnalytics extends BaseAnalyticsResult {
@@ -232,8 +231,8 @@ export interface SatisfactionAnalytics extends BaseAnalyticsResult {
   avgRating: number;
   percentageHigh: number;
   percentageLow: number;
-  data: Array<{ rating: number; count: number }>;
   ratingDistribution: Array<{ rating: number; count: number }>;
+  data: Array<{ rating: number; count: number }>;
 }
 
 export interface IssueDistributionAnalytics extends BaseAnalyticsResult {
@@ -260,10 +259,14 @@ export type AnalyticsResult =
 export interface StreamableUIProps {
   content: string | any[];
   done: boolean;
+  children?: React.ReactNode;
 }
 
 export interface StreamableValue {
-  value: string;
+  type?: string;
+  value: string | number | boolean | null | undefined;
+  metadata?: Record<string, any>;
+  content?: string | any[];
 }
 
 export interface IntentResult {
@@ -272,4 +275,7 @@ export interface IntentResult {
   query?: string;
   metrics?: Array<keyof typeof ANALYTICS_METRICS>;
   reportType?: string;
-} 
+}
+
+// Add StreamableUI type
+export type StreamableUI = (props: StreamableUIProps) => Promise<JSX.Element>; 

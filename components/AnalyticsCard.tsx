@@ -44,6 +44,25 @@ interface AnalyticsData {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
+// Custom tooltip component for charts
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload || !payload.length) {
+    return null;
+  }
+
+  return (
+    <div className="bg-white dark:bg-zinc-800 p-3 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700">
+      <p className="font-medium text-zinc-900 dark:text-zinc-100 mb-1">{label}</p>
+      {payload.map((entry: any, index: number) => (
+        <p key={index} className="text-sm" style={{ color: entry.color }}>
+          {entry.name}: {typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
+          {entry.name === 'Resolution Time' ? ' days' : ''}
+        </p>
+      ))}
+    </div>
+  );
+};
+
 export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: string }) {
   if (!data) {
     return (
@@ -113,6 +132,10 @@ export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: s
         );
 
       case 'line':
+        const dataKey = metric === 'resolution_time' ? 'avgResolutionTime' : 'count';
+        const yAxisLabel = metric === 'resolution_time' ? 'Days' : 'Count';
+        const xAxisKey = metric === 'resolution_time' ? 'date' : 'period';
+        
         return (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart
@@ -121,21 +144,30 @@ export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: s
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
-                dataKey="period"
+                dataKey={xAxisKey}
                 angle={-45}
                 textAnchor="end"
                 height={60}
                 interval={0}
               />
-              <YAxis />
-              <Tooltip />
+              <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} />
+              <Tooltip content={<CustomTooltip />} />
               <Legend />
-              <Line type="monotone" dataKey="count" stroke="#8884d8" activeDot={{ r: 8 }} />
+              <Line 
+                type="monotone" 
+                dataKey={dataKey} 
+                stroke="#8884d8" 
+                activeDot={{ r: 8 }}
+                name={metric === 'resolution_time' ? 'Resolution Time' : 'Count'} 
+              />
             </LineChart>
           </ResponsiveContainer>
         );
 
       default:
+        const barDataKey = metric === 'resolution_time' ? 'avgResolutionTime' : 'count';
+        const barYAxisLabel = metric === 'resolution_time' ? 'Days' : 'Count';
+        
         return (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart
@@ -144,16 +176,20 @@ export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: s
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
-                dataKey={Object.keys(data.data[0]).find(key => key !== 'count')}
+                dataKey={Object.keys(data.data[0]).find(key => key !== barDataKey)}
                 angle={-45}
                 textAnchor="end"
                 height={60}
                 interval={0}
               />
-              <YAxis />
-              <Tooltip />
+              <YAxis label={{ value: barYAxisLabel, angle: -90, position: 'insideLeft' }} />
+              <Tooltip content={<CustomTooltip />} />
               <Legend />
-              <Bar dataKey="count" fill="#8884d8" />
+              <Bar 
+                dataKey={barDataKey} 
+                fill="#8884d8"
+                name={metric === 'resolution_time' ? 'Resolution Time' : 'Count'} 
+              />
             </BarChart>
           </ResponsiveContainer>
         );
