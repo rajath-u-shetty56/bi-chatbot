@@ -1,42 +1,108 @@
-# Generative UI with React Server Components and Vercel AI SDK
+# Ticket Analytics System
 
-> **Note**: Development of AI SDK RSC is currently paused. For more information, see [Migrating from AI SDK RSC](https://sdk.vercel.ai/docs/ai-sdk-rsc/migrating-to-ui#background).
+A modern web application for analyzing and managing ticket data with powerful analytics capabilities.
 
-This example demonstrates how to use the [Vercel AI SDK](https://sdk.vercel.ai/docs) with [Next.js](https://nextjs.org/) and the `streamUI` function to create generative user interfaces by streaming React Server Components to the client.
+## Features
 
-## Deploy your own
+- **Comprehensive Analytics Dashboard**
+  - Ticket resolution time tracking
+  - Customer satisfaction metrics
+  - Issue type distribution analysis
+  - Agent performance monitoring
+  - Trend analysis and reporting
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-sdk-preview-rsc-genui&env=OPENAI_API_KEY&envDescription=API%20keys%20needed%20for%20application&envLink=platform.openai.com)
+- **Data Visualization**
+  - Interactive charts and graphs
+  - Customizable time periods
+  - Multiple chart types (bar, line, pie)
+  - Real-time data updates
 
-## How to use
+- **Advanced Analytics**
+  - Natural language query support
+  - AI-powered insights generation
+  - Custom metric calculations
+  - Trend analysis and forecasting
 
-Run [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app) with [npm](https://docs.npmjs.com/cli/init), [Yarn](https://yarnpkg.com/lang/en/docs/cli/create/), or [pnpm](https://pnpm.io) to bootstrap the example:
+## Tech Stack
 
+- Next.js
+- Prisma
+- TypeScript
+- Tailwind CSS
+- Chart.js
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v18 or higher)
+- PostgreSQL database
+- npm or yarn package manager
+
+### Installation
+
+1. Clone the repository:
 ```bash
-npx create-next-app --example https://github.com/vercel-labs/ai-sdk-preview-rsc-genui ai-sdk-preview-rsc-genui-example
+git clone [repository-url]
+cd [project-directory]
 ```
 
+2. Install dependencies:
 ```bash
-yarn create next-app --example https://github.com/vercel-labs/ai-sdk-preview-rsc-genui ai-sdk-preview-rsc-genui-example
+npm install
+# or
+yarn install
 ```
 
+3. Set up environment variables:
 ```bash
-pnpm create next-app --example https://github.com/vercel-labs/ai-sdk-preview-rsc-genui ai-sdk-preview-rsc-genui-example
+cp .env.example .env
+```
+Edit `.env` with your database credentials and other configuration.
+
+4. Initialize the database:
+```bash
+npx prisma migrate dev
 ```
 
-To run the example locally you need to:
+5. Start the development server:
+```bash
+npm run dev
+# or
+yarn dev
+```
 
-1. Sign up for accounts with the AI providers you want to use (e.g., OpenAI, Anthropic).
-2. Obtain API keys for each provider.
-3. Set the required environment variables as shown in the `.env.example` file, but in a new file called `.env`.
-4. `npm install` to install the required dependencies.
-5. `npm run dev` to launch the development server.
+The application will be available at `http://localhost:3000`
 
+## Usage
 
-## Learn More
+1. **Data Import**
+   - Import your ticket data through the dashboard
+   - Supported formats: CSV, JSON
+   - Automatic data validation and cleaning
 
-To learn more about Vercel AI SDK or Next.js take a look at the following resources:
+2. **Analytics Dashboard**
+   - View key metrics and KPIs
+   - Customize time periods
+   - Export reports and visualizations
 
-- [Vercel AI SDK docs](https://sdk.vercel.ai/docs)
-- [Vercel AI Playground](https://play.vercel.ai)
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+3. **Natural Language Queries**
+   - Ask questions about your data in plain English
+   - Get instant insights and visualizations
+   - Save and share custom queries
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support, please open an issue in the GitHub repository or contact the development team.
