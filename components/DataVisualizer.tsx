@@ -771,9 +771,8 @@ export function DataVisualizer({ result, query }: { result: QueryResult; query: 
       )}
 
       {/* Action Buttons */}
-      <div className="flex justify-between">
+      <div className="flex justify-end">
         <Button variant="outline" onClick={handleExportPDF}>Export to PDF</Button>
-        <Button variant="outline">Download Chart</Button>
       </div>
     </div>
   );

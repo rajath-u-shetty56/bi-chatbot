@@ -263,7 +263,6 @@ export interface StreamableUIProps {
 }
 
 export interface StreamableValue {
-  type?: string;
   value: string | number | boolean | null | undefined;
   metadata?: Record<string, any>;
   content?: string | any[];

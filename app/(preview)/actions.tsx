@@ -2,7 +2,7 @@
 
 import { Message, TextStreamMessage } from "@/components/message";
 import { generateId, CoreMessage } from "ai";
-import { createAI, createStreamableUI, getMutableAIState } from "ai/rsc";
+import { createAI, createStreamableUI, createStreamableValue, getMutableAIState } from "ai/rsc";
 import { openai } from "@ai-sdk/openai";
 import { ReactNode } from "react";
 import { AnalyticsCard } from "@/components/AnalyticsCard";
@@ -89,6 +89,153 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
       return {
         type: "dataset-upload",
       };
+
+    case "generateReport":
+      try {
+        const { datasetId, reportType, metrics } = args;
+        if (!datasetId) {
+          throw new Error("Dataset ID is required");
+        }
+
+        if (!metrics || !Array.isArray(metrics)) {
+          throw new Error("Metrics array is required");
+        }
+
+        // Get analytics for each metric
+        const analyticsPromises = metrics.map(async (metric) => {
+          const queryConfig = ANALYTICS_QUERIES[metric as keyof typeof ANALYTICS_METRICS];
+          if (!queryConfig) {
+            throw new Error(`No query configuration found for metric: ${metric}`);
+          }
+
+          const rawAnalytics = await getTicketAnalytics(
+            datasetId,
+            queryConfig.metric,
+            queryConfig.groupBy
+          ) as AnalyticsResult;
+
+          if (!rawAnalytics || typeof rawAnalytics !== "object") {
+            throw new Error("Invalid analytics data returned from server");
+          }
+
+          let analyticsData: any[] = [];
+          let summaryMetrics: Array<{ label: string; value: string }> = [];
+          let insights: string[] = [];
+
+          // Process different types of analytics results using existing logic
+          if (isResolutionTimeAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.data;
+            summaryMetrics = [
+              {
+                label: "Average Resolution Time",
+                value: `${rawAnalytics.avgResolutionTime.toFixed(1)} days`
+              },
+              {
+                label: "Fastest Resolution",
+                value: `${rawAnalytics.fastestResolution.toFixed(1)} days`
+              },
+              {
+                label: "% Resolved in 24h",
+                value: `${rawAnalytics.percentageUnderDay.toFixed(1)}%`
+              }
+            ];
+            insights = [
+              `Average resolution time is ${rawAnalytics.avgResolutionTime.toFixed(1)} days`,
+              `${rawAnalytics.percentageUnderDay.toFixed(1)}% of tickets are resolved within 24 hours`,
+              `Fastest resolution time is ${rawAnalytics.fastestResolution.toFixed(1)} days`
+            ];
+          } else if (isSatisfactionAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.data;
+            summaryMetrics = [
+              {
+                label: "Average Rating",
+                value: `${rawAnalytics.avgRating.toFixed(1)}/5`
+              },
+              {
+                label: "High Satisfaction",
+                value: `${rawAnalytics.percentageHigh.toFixed(1)}%`
+              },
+              {
+                label: "Low Satisfaction",
+                value: `${rawAnalytics.percentageLow.toFixed(1)}%`
+              }
+            ];
+            insights = [
+              `Average satisfaction rating is ${rawAnalytics.avgRating.toFixed(1)}/5`,
+              `${rawAnalytics.percentageHigh.toFixed(1)}% of ratings are high (4-5)`,
+              `${rawAnalytics.percentageLow.toFixed(1)}% of ratings are low (1-2)`
+            ];
+          } else if (isIssueDistributionAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.issueDistribution;
+            const topIssueText = `${rawAnalytics.topIssue.type} (${rawAnalytics.topIssue.count})`;
+            summaryMetrics = [
+              {
+                label: "Most Common Issue",
+                value: topIssueText
+              },
+              {
+                label: "Total Categories",
+                value: rawAnalytics.categories.length.toString()
+              }
+            ];
+            insights = [
+              `Most common issue is ${topIssueText}`,
+              `There are ${rawAnalytics.categories.length} different issue categories`
+            ];
+          } else if (isTicketTrendsAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.data;
+            summaryMetrics = [
+              {
+                label: "Total Tickets",
+                value: rawAnalytics.totalTickets.toString()
+              },
+              {
+                label: "Average per Period",
+                value: rawAnalytics.avgTicketsPerPeriod.toFixed(1)
+              }
+            ];
+            insights = [
+              `Total of ${rawAnalytics.totalTickets} tickets processed`,
+              `Average of ${rawAnalytics.avgTicketsPerPeriod.toFixed(1)} tickets per period`
+            ];
+          }
+
+          const aiExplanation = generateAnalyticsExplanation(metric, analyticsData, summaryMetrics, insights);
+
+          return {
+            title: getMetricTitle(metric),
+            content: aiExplanation,
+            visualization: {
+              chartType: queryConfig.chartType as ChartType,
+              data: analyticsData,
+              summary: summaryMetrics.map(m => `${m.label}: ${m.value}`).join('. '),
+              insights
+            }
+          };
+        });
+
+        const analyticsResults = await Promise.all(analyticsPromises);
+
+        const reportData: ReportData = {
+          datasetId,
+          reportType,
+          metrics,
+          generated: new Date().toISOString(),
+          sections: analyticsResults
+        };
+
+        return {
+          type: "report",
+          data: reportData
+        } as ReportUIData;
+
+      } catch (error) {
+        console.error("Error generating report:", error);
+        return {
+          type: "error",
+          message: `Failed to generate report: ${error instanceof Error ? error.message : "Unknown error"}`,
+        };
+      }
 
     case "listDatasets":
       try {
@@ -601,44 +748,44 @@ export async function sendMessage(message: string) {
     // If not handled by a tool, proceed with normal chat using OpenAI
     console.log("Processing with LLM chat...");
     
+    const textStream = createStreamableValue("");
     const { value: stream } = await createStreamableUI(
-      async (props: StreamableUIProps): Promise<JSX.Element> => {
-        const textContent = Array.isArray(props.content)
-          ? props.content
-              .map((part) =>
-                typeof part === "string" ? part : JSON.stringify(part)
-              )
-              .join("")
-          : typeof props.content === "string"
-          ? props.content
-          : JSON.stringify(props.content);
-
-        if (props.done) {
-          const assistantMessage: CoreMessage = {
-            role: "assistant",
-            content: textContent,
-          };
-
-          const assistantUIMessage: UIMessage = {
-            id: generateId(),
-            role: "assistant",
-            content: textContent,
-          };
-
-          aiState.done({
-            ...aiState.get(),
-            messages: [...currentAIMessages, userMessage, assistantMessage],
-            uiState: {
-              messages: [...currentUIState, userUIMessage, assistantUIMessage],
-            },
-          });
-
-          return <Message role="assistant" content={textContent} />;
-        } else {
-          return <TextStreamMessage content={textContent} />;
-        }
-      }
+      <Message role="assistant" content={textStream.value.toString()} />
     );
+
+    (async () => {
+      const response = await openaiClient.complete(message, {
+        stream: true,
+      });
+
+      let fullText = "";
+      for await (const chunk of response) {
+        const text = chunk.content;
+        fullText += text;
+        textStream.append(text);
+      }
+
+      const assistantMessage: CoreMessage = {
+        role: "assistant",
+        content: fullText,
+      };
+
+      const assistantUIMessage: UIMessage = {
+        id: generateId(),
+        role: "assistant",
+        content: fullText,
+      };
+
+      aiState.done({
+        ...aiState.get(),
+        messages: [...currentAIMessages, userMessage, assistantMessage],
+        uiState: {
+          messages: [...currentUIState, userUIMessage, assistantUIMessage],
+        },
+      });
+
+      textStream.done();
+    })();
 
     return stream;
   } catch (error) {

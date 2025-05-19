@@ -284,25 +284,25 @@ export async function analyzeDataByQuery(
     ];
 
     recommendedChartType = 'bar';
-  } else if (lowerQuery.includes('issue') || lowerQuery.includes('type')) {
+  } else if (lowerQuery.includes('issue') || lowerQuery.includes('type') || lowerQuery.includes('distribution')) {
     // Issue type analysis
     data = issueTypes.map(issue => ({
-      name: issue.issueType,
-      value: issue._count
+      type: issue.issueType,
+      count: issue._count
     }));
 
     const topIssue = data[0];
-    const totalIssues = data.reduce((sum, d) => sum + d.value, 0);
+    const totalIssues = data.reduce((sum, d) => sum + d.count, 0);
     
-    summary = `Analysis of issue types shows "${topIssue.name}" as the most common, accounting for ` +
-      `${((topIssue.value/totalIssues)*100).toFixed(1)}% of all tickets. ` +
-      `The top 3 issues account for ${((data.slice(0,3).reduce((sum, d) => sum + d.value, 0)/totalIssues)*100).toFixed(1)}% of tickets.`;
+    summary = `Analysis of issue types shows "${topIssue.type}" as the most common, accounting for ` +
+      `${((topIssue.count/totalIssues)*100).toFixed(1)}% of all tickets. ` +
+      `The top 3 issues account for ${((data.slice(0,3).reduce((sum, d) => sum + d.count, 0)/totalIssues)*100).toFixed(1)}% of tickets.`;
     
     insights = [
-      `Most common issue: ${topIssue.name} (${topIssue.value} tickets)`,
+      `Most common issue: ${topIssue.type} (${topIssue.count} tickets)`,
       `${data.length} distinct issue types identified`,
-      `Top 3 issues account for ${((data.slice(0,3).reduce((sum, d) => sum + d.value, 0)/totalIssues)*100).toFixed(1)}% of tickets`,
-      ...data.slice(0,3).map(d => `${d.name}: ${d.value} tickets (${((d.value/totalIssues)*100).toFixed(1)}%)`)
+      `Top 3 issues account for ${((data.slice(0,3).reduce((sum, d) => sum + d.count, 0)/totalIssues)*100).toFixed(1)}% of tickets`,
+      ...data.slice(0,3).map(d => `${d.type}: ${d.count} tickets (${((d.count/totalIssues)*100).toFixed(1)}%)`)
     ];
 
     recommendedChartType = 'pie';
@@ -555,7 +555,8 @@ async function getIssueDistributionAnalytics(whereClause: any) {
   return {
     issueDistribution,
     topIssue,
-    categories: sortedCategories
+    categories: sortedCategories,
+    data: issueDistribution // Add the data property with the same format as issueDistribution
   };
 }
 
