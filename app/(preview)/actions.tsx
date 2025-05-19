@@ -60,8 +60,8 @@ import {
   AnalyticsQuery
 } from "@/lib/analytics";
 
-// Initialize OpenAI client
-const openaiClient = openai("gpt-3.5-turbo-instruct");
+// Initialize OpenAI client with chat completion model
+const openaiClient = openai("gpt-4");
 
 // Add type guard functions
 function isResolutionTimeAnalytics(data: AnalyticsResult): data is ResolutionTimeAnalytics {
@@ -754,15 +754,100 @@ export async function sendMessage(message: string) {
     );
 
     (async () => {
-      const response = await openaiClient.complete(message, {
-        stream: true,
+      // Get current dataset context if available
+      let datasetContext = "";
+      try {
+        const datasets = await getDatasetList();
+        if (datasets && datasets.length > 0) {
+          const currentDataset = await getDatasetById(datasets[0].id);
+          if (currentDataset) {
+            datasetContext = `
+              You are analyzing a dataset named "${currentDataset.name}" containing help desk tickets.
+              The dataset has information about ticket resolution times, customer satisfaction, issue types, and trends.
+              Total records: ${currentDataset._count.tickets}
+              Created: ${currentDataset.createdAt}
+            `;
+          }
+        }
+      } catch (error) {
+        console.error("Error getting dataset context:", error);
+      }
+
+      // Prepare chat messages with system prompt
+      const chatMessages = [
+        {
+          role: "system",
+          content: `You are an intelligent analytics assistant that helps users understand their help desk data.
+          ${datasetContext}
+          
+          Your capabilities include:
+          1. Analyzing ticket resolution times and trends
+          2. Understanding customer satisfaction patterns
+          3. Identifying common issues and their distribution
+          4. Generating insights and recommendations
+          
+          When responding:
+          - Be specific and data-driven in your responses
+          - If the user asks about data visualization or specific metrics, suggest using the appropriate analytics tools
+          - For general questions, provide clear explanations with context
+          - If you're unsure about something, acknowledge it and ask for clarification
+          - Use a professional but conversational tone
+          - Keep responses concise but informative`
+        },
+        ...currentAIMessages,
+        { role: "user", content: message }
+      ];
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4",
+          messages: chatMessages,
+          temperature: 0.7,
+          stream: true,
+        }),
       });
 
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("Failed to get response reader");
+      }
+
       let fullText = "";
-      for await (const chunk of response) {
-        const text = chunk.content;
-        fullText += text;
-        textStream.append(text);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+        
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+            
+            try {
+              const json = JSON.parse(data);
+              const content = json.choices[0]?.delta?.content || "";
+              if (content) {
+                fullText += content;
+                textStream.append(content);
+              }
+            } catch (error) {
+              console.error("Error parsing chunk:", error);
+            }
+          }
+        }
       }
 
       const assistantMessage: CoreMessage = {

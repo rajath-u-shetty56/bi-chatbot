@@ -22,12 +22,10 @@ export async function getTicketAnalytics(
   metric: string,
   groupBy?: string
 ) {
-  // Base where clause
   const whereClause = {
     datasetId
   };
   
-  // Return different analytics based on requested metric
   switch (metric) {
     case "resolution_time":
       return getResolutionTimeAnalytics(whereClause);
@@ -747,7 +745,6 @@ function getTimeframeFilter(timeframe: string) {
 
 // Helper function for AI explanations
 function generateAIExplanation(query: string, data: any[], summary: string, insights: string[]): string {
-  // Add logging to debug the input parameters
   console.log("Generating AI Explanation for:", {
     query,
     dataLength: data.length,
@@ -755,7 +752,6 @@ function generateAIExplanation(query: string, data: any[], summary: string, insi
     insightsCount: insights.length
   });
 
-  // Extract key metrics for analysis
   const metrics = {
     totalItems: data.length,
     hasTimeData: data.some(d => d.date || d.period || d.timestamp),
@@ -764,7 +760,6 @@ function generateAIExplanation(query: string, data: any[], summary: string, insi
     minValue: Math.min(...data.map(d => d.value || d.count || 0))
   };
 
-  // Common patterns in the query
   if (query.includes('ticket') && (query.includes('status') || query.includes('resolved'))) {
     const resolutionRate = insights[0] ? parseInt(insights[0]) : 0;
     return `Based on your query about ticket status, I analyzed the resolution patterns in your dataset. ` +
@@ -821,7 +816,6 @@ function generateAIExplanation(query: string, data: any[], summary: string, insi
            `These comparisons highlight areas for potential optimization and improvement.`;
   }
   
-  // Enhanced default explanation
   return `I've conducted a comprehensive analysis of your data based on the query "${query}". ` +
          `${summary} The analysis covers ${metrics.totalItems} data points across ${metrics.categories} categories. ` +
          `Key findings include: ${insights.slice(0, 3).map(i => i.toLowerCase()).join(', ')}. ` +
