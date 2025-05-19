@@ -126,19 +126,15 @@ export interface QueryResult {
 }
 
 export interface ReportData {
-  datasetId: string;
-  reportType: string;
-  metrics: string[];
-  generated: string;
+  title: string;
+  description: string;
   sections: Array<{
     title: string;
-    content: string;
-    visualization?: {
-      chartType?: "bar" | "line" | "pie" | "table";
-      data: any[];
-      summary: string;
-      insights: Array<string>;
-    };
+    metrics: Array<{ label: string; value: string }>;
+    insights: string[];
+    data: any[];
+    aiExplanation?: string;
+    chartType: ChartType;
   }>;
 }
 

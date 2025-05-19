@@ -2,7 +2,7 @@
 
 import { Message, TextStreamMessage } from "@/components/message";
 import { generateId, CoreMessage } from "ai";
-import { createAI, createStreamableUI, getMutableAIState } from "ai/rsc";
+import { createAI, createStreamableUI, getMutableAIState, createStreamableValue, streamUI } from "ai/rsc";
 import { openai } from "@ai-sdk/openai";
 import { ReactNode } from "react";
 import { AnalyticsCard } from "@/components/AnalyticsCard";
@@ -346,11 +346,13 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
           };
         }
 
+        // Type guard for ChartType
+        function isChartType(type: string): type is ChartType {
+          return ["bar", "line", "pie", "table"].includes(type);
+        }
+
         // Ensure chart type is valid
-        const validChartTypes = ["bar", "line", "pie", "table"] as const;
-        const chartType = validChartTypes.includes(result.chartType as any) 
-          ? result.chartType as ChartType 
-          : "table" as ChartType;
+        const chartType = isChartType(result.chartType) ? result.chartType : "table";
 
         const queryResult: QueryResult = {
           chartType,
@@ -369,6 +371,143 @@ const handleToolExecution = async (toolName: string, args: any): Promise<UICompo
         return {
           type: "error" as const,
           message: `Failed to visualize data. Please verify the query and try again.`,
+        };
+      }
+
+    case "generateReport":
+      try {
+        const { datasetId, reportType, metrics } = args;
+        if (!datasetId || !metrics || !Array.isArray(metrics)) {
+          throw new Error("Dataset ID and metrics array are required for report generation");
+        }
+
+        // Collect analytics for all requested metrics
+        const analyticsPromises = metrics.map(async (metric) => {
+          const queryConfig = ANALYTICS_QUERIES[metric as keyof typeof ANALYTICS_METRICS];
+          if (!queryConfig) {
+            throw new Error(`No query configuration found for metric: ${metric}`);
+          }
+
+          const rawAnalytics = await getTicketAnalytics(
+            datasetId,
+            queryConfig.metric,
+            queryConfig.groupBy
+          ) as AnalyticsResult;
+
+          let analyticsData: any[] = [];
+          let summaryMetrics: Array<{ label: string; value: string }> = [];
+          let insights: string[] = [];
+
+          if (isResolutionTimeAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.data;
+            summaryMetrics = [
+              {
+                label: "Average Resolution Time",
+                value: `${rawAnalytics.avgResolutionTime.toFixed(1)} days`
+              },
+              {
+                label: "Fastest Resolution",
+                value: `${rawAnalytics.fastestResolution.toFixed(1)} days`
+              },
+              {
+                label: "% Resolved in 24h",
+                value: `${rawAnalytics.percentageUnderDay.toFixed(1)}%`
+              }
+            ];
+            insights = [
+              `Average resolution time is ${rawAnalytics.avgResolutionTime.toFixed(1)} days`,
+              `${rawAnalytics.percentageUnderDay.toFixed(1)}% of tickets are resolved within 24 hours`,
+              `Fastest resolution time is ${rawAnalytics.fastestResolution.toFixed(1)} days`
+            ];
+          } else if (isSatisfactionAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.data;
+            summaryMetrics = [
+              {
+                label: "Average Rating",
+                value: `${rawAnalytics.avgRating.toFixed(1)}/5`
+              },
+              {
+                label: "High Satisfaction",
+                value: `${rawAnalytics.percentageHigh.toFixed(1)}%`
+              }
+            ];
+            insights = [
+              `Average satisfaction rating is ${rawAnalytics.avgRating.toFixed(1)}/5`,
+              `${rawAnalytics.percentageHigh.toFixed(1)}% of ratings are high (4-5)`
+            ];
+          } else if (isIssueDistributionAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.data;
+            const topIssueText = `${rawAnalytics.topIssue.type} (${rawAnalytics.topIssue.count})`;
+            summaryMetrics = [
+              {
+                label: "Most Common Issue",
+                value: topIssueText
+              },
+              {
+                label: "Total Categories",
+                value: rawAnalytics.categories.length.toString()
+              }
+            ];
+            insights = [
+              `Most common issue is ${topIssueText}`,
+              `There are ${rawAnalytics.categories.length} different issue categories`
+            ];
+          } else if (isTicketTrendsAnalytics(rawAnalytics)) {
+            analyticsData = rawAnalytics.data;
+            summaryMetrics = [
+              {
+                label: "Total Tickets",
+                value: rawAnalytics.totalTickets.toString()
+              },
+              {
+                label: "Average per Period",
+                value: rawAnalytics.avgTicketsPerPeriod.toFixed(1)
+              }
+            ];
+            insights = [
+              `Total of ${rawAnalytics.totalTickets} tickets processed`,
+              `Average of ${rawAnalytics.avgTicketsPerPeriod.toFixed(1)} tickets per period`
+            ];
+          }
+
+          const aiExplanation = generateAnalyticsExplanation(metric, analyticsData, summaryMetrics, insights);
+
+          return {
+            metric,
+            title: getMetricTitle(metric),
+            data: analyticsData,
+            summaryMetrics,
+            insights,
+            aiExplanation,
+            chartType: queryConfig.chartType
+          };
+        });
+
+        const analyticsResults = await Promise.all(analyticsPromises);
+
+        const reportData: ReportData = {
+          title: `${reportType} Analytics Report`,
+          description: `Comprehensive analysis of ticket metrics for ${reportType.toLowerCase()} performance review`,
+          sections: analyticsResults.map(result => ({
+            title: result.title,
+            metrics: result.summaryMetrics,
+            insights: result.insights,
+            data: result.data,
+            aiExplanation: result.aiExplanation,
+            chartType: result.chartType
+          }))
+        };
+
+        return {
+          type: "report",
+          data: reportData
+        } as ReportUIData;
+
+      } catch (error) {
+        console.error("Error generating report:", error);
+        return {
+          type: "error",
+          message: `Failed to generate report: ${error instanceof Error ? error.message : "Unknown error"}`,
         };
       }
 
@@ -393,7 +532,7 @@ const detectIntent = async (message: string) => {
     return {
       intent: "generate_report",
       metrics: [
-        ANALYTICS_METRICS.resolution_time,
+        ANALYTICS_METRICS.ticket_priority,
         ANALYTICS_METRICS.satisfaction,
         ANALYTICS_METRICS.issue_distribution,
         ANALYTICS_METRICS.ticket_trends
@@ -601,28 +740,23 @@ export async function sendMessage(message: string) {
     // If not handled by a tool, proceed with normal chat using OpenAI
     console.log("Processing with LLM chat...");
     
-    const { value: stream } = await createStreamableUI(
-      async (props: StreamableUIProps): Promise<JSX.Element> => {
-        const textContent = Array.isArray(props.content)
-          ? props.content
-              .map((part) =>
-                typeof part === "string" ? part : JSON.stringify(part)
-              )
-              .join("")
-          : typeof props.content === "string"
-          ? props.content
-          : JSON.stringify(props.content);
+    const contentStream = createStreamableValue("");
+    const textComponent = <TextStreamMessage content={contentStream.value} />;
 
-        if (props.done) {
+    const { value: stream } = await streamUI({
+      model: openaiClient,
+      messages: currentAIMessages,
+      text: async function* ({ content, done }) {
+        if (done) {
           const assistantMessage: CoreMessage = {
             role: "assistant",
-            content: textContent,
+            content,
           };
 
           const assistantUIMessage: UIMessage = {
             id: generateId(),
             role: "assistant",
-            content: textContent,
+            content,
           };
 
           aiState.done({
@@ -633,12 +767,14 @@ export async function sendMessage(message: string) {
             },
           });
 
-          return <Message role="assistant" content={textContent} />;
+          contentStream.done();
         } else {
-          return <TextStreamMessage content={textContent} />;
+          contentStream.update(content);
         }
+
+        return textComponent;
       }
-    );
+    });
 
     return stream;
   } catch (error) {
@@ -712,22 +848,32 @@ function generateAnalyticsExplanation(
     case 'satisfaction':
       const avgRating = summaryMetrics.find(m => m.label === "Average Rating")?.value || "N/A";
       const highSatisfaction = summaryMetrics.find(m => m.label === "High Satisfaction")?.value || "N/A";
-      return `Analysis of customer satisfaction shows an average rating of ${avgRating}. ${highSatisfaction} of tickets received high satisfaction ratings (4-5 stars). This indicates ${
-        parseFloat(avgRating) >= 4 ? 'strong overall customer satisfaction' : 'areas for potential improvement in customer satisfaction'
-      }. ${insights[0]}`;
+      return `Analysis of customer satisfaction metrics reveals valuable insights into service quality. The average rating of ${avgRating} indicates ${
+        parseFloat(avgRating) >= 4 ? 'strong customer satisfaction levels' : 'areas needing attention'
+      }. ${highSatisfaction} of tickets received high satisfaction ratings (4-5 stars), suggesting ${
+        parseFloat(highSatisfaction) >= 70 ? 'effective customer service practices' : 'opportunities for service improvement'
+      }. ${insights[0]}. This data helps identify successful service patterns and areas for enhancement.`;
 
-    case 'resolution_time':
-      const avgResolution = summaryMetrics.find(m => m.label === "Average Resolution Time")?.value || "N/A";
-      return `The analysis of resolution times reveals an average resolution time of ${avgResolution}. ${insights[0]}. This data suggests ${
-        parseFloat(avgResolution) <= 2 ? 'efficient ticket handling' : 'potential opportunities for improving resolution speed'
-      }.`;
+    case 'ticket_priority':
+      const highPriority = data.find(d => d.priority === 'High')?.count || 0;
+      const totalTickets = data.reduce((sum, d) => sum + d.count, 0);
+      const highPriorityPercentage = ((highPriority / totalTickets) * 100).toFixed(1);
+      return `The ticket priority distribution provides crucial insights into workload management. ${highPriorityPercentage}% of tickets are marked as high priority, indicating ${
+        parseFloat(highPriorityPercentage) > 30 ? 'a significant number of urgent issues requiring immediate attention' : 'a manageable level of urgent cases'
+      }. This distribution helps in resource allocation and prioritization strategies. Understanding this pattern is essential for maintaining efficient service delivery and meeting customer expectations.`;
 
     case 'issue_distribution':
-      const topIssue = summaryMetrics.find(m => m.label === "Most Common Issue")?.value || "N/A";
-      return `Analysis of issue distribution shows that ${topIssue} is the most common issue type. ${insights[0]}. Understanding this distribution can help in resource allocation and process optimization.`;
+      const topIssue = data[0]?.type || 'Unknown';
+      const topIssueCount = data[0]?.count || 0;
+      const totalIssues = data.reduce((sum, d) => sum + d.count, 0);
+      const topIssuePercentage = ((topIssueCount / totalIssues) * 100).toFixed(1);
+      return `Analysis of issue types reveals important patterns in customer support needs. The most common issue type "${topIssue}" represents ${topIssuePercentage}% of all tickets, ${
+        parseFloat(topIssuePercentage) > 40 ? 'suggesting a need for focused attention in this area' : 'indicating a relatively balanced distribution of issues'
+      }. This insight can guide training programs, resource allocation, and potential process improvements. Understanding these patterns helps in proactive problem-solving and service optimization.`;
 
-    case 'agent_performance':
-      return `The agent performance analysis reveals variations in handling efficiency and customer satisfaction. ${insights[0]}. ${insights[1]}. This information can be used to identify best practices and areas for team improvement.`;
+    case 'ticket_trends':
+      const recentTrend = data.slice(-3).every((d, i, arr) => i === 0 || d.count >= arr[i-1].count) ? 'increasing' : 'varying';
+      return `Ticket volume trends show ${recentTrend} patterns in support demand. ${insights[0]}. ${insights[1]}. This trend analysis is crucial for capacity planning, resource allocation, and identifying seasonal patterns or unusual spikes in support needs. Understanding these patterns helps in proactive staffing and resource management.`;
 
     default:
       return `Analysis of ${metric} shows interesting patterns in your data. ${insights.join(' ')}. This information can be used to optimize processes and improve service delivery.`;

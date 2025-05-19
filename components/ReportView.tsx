@@ -1,48 +1,43 @@
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DataVisualizer } from "./DataVisualizer";
-import { ReportData } from "@/types/chat";
+import { AnalyticsCard } from './AnalyticsCard';
+import { ReportData } from '@/types/ui';
 
-export function ReportView({ data }: { data: ReportData }) {
+interface ReportViewProps {
+  data: ReportData;
+}
+
+export function ReportView({ data }: ReportViewProps) {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-xl font-bold">
-              {data.reportType} Report
-            </CardTitle>
-            <p className="text-sm text-gray-500 mt-1">
-              Generated on {new Date(data.generated).toLocaleString()}
-            </p>
+            <CardTitle className="text-xl">{data.title}</CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{data.description}</p>
           </div>
           <Badge variant="outline" className="text-xs">
-            {data.metrics.length} metrics analyzed
+            {data.sections.length} metrics analyzed
           </Badge>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
             {data.sections.map((section, index) => (
-              <Card key={index} className="border border-gray-200 dark:border-gray-800">
-                <CardHeader>
-                  <CardTitle className="text-lg">{section.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {section.content}
-                    </p>
-                    {section.visualization && (
-                      <div className="mt-4">
-                        <DataVisualizer 
-                          result={section.visualization} 
-                          query={section.title}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <div key={index} className="border-t border-gray-200 dark:border-gray-700 pt-6 first:border-0 first:pt-0">
+                <h3 className="text-lg font-semibold mb-4">{section.title}</h3>
+                <AnalyticsCard
+                  data={{
+                    title: section.title,
+                    description: section.aiExplanation || '',
+                    summaryMetrics: section.metrics,
+                    insights: section.insights,
+                    data: section.data,
+                    aiExplanation: section.aiExplanation
+                  }}
+                  metric={section.title.toLowerCase().replace(/ /g, '_')}
+                />
+              </div>
             ))}
           </div>
         </CardContent>

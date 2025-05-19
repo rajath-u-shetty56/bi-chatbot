@@ -10,6 +10,8 @@ import { motion } from 'framer-motion';
 import { generateId } from 'ai';
 import { DataVisualizer } from '@/components/DataVisualizer';
 import { AnalyticsCard } from '@/components/AnalyticsCard';
+import { Report } from '@/components/Report';
+import { ReportView } from '@/components/ReportView';
 
 export default function CSVAnalysisPage() {
   const router = useRouter();
@@ -213,6 +215,11 @@ export default function CSVAnalysisPage() {
                   result={message.ui.data} 
                   query={message.content}
                 />
+              </div>
+            )}
+            {message.ui.type === 'report' && (
+              <div className="bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden">
+                <ReportView data={message.ui.data} />
               </div>
             )}
           </div>

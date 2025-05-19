@@ -72,6 +72,14 @@ export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: s
     );
   }
 
+  const NoDataDisplay = ({ message }: { message?: string }) => (
+    <div className="flex items-center justify-center h-64 border rounded-md bg-gray-50 dark:bg-gray-800">
+      <p className="text-gray-500">{message || 'No data available to visualize'}</p>
+    </div>
+  );
+
+  const isValidData = data.data && Array.isArray(data.data) && data.data.length > 0;
+
   const getMetricTitle = () => {
     switch (metric) {
       case "resolution_time":
@@ -104,6 +112,8 @@ export function AnalyticsCard({ data, metric }: { data: AnalyticsData; metric: s
   };
 
   const renderChart = () => {
+    if (!data.data || data.data.length === 0) return null;
+
     const chartType = getChartType();
 
     switch (chartType) {

@@ -5,7 +5,7 @@ export const ANALYTICS_METRICS = {
   ticket_trends: "ticket_trends",
   satisfaction: "satisfaction",
   issue_distribution: "issue_distribution",
-  resolution_time: "resolution_time",
+  ticket_priority: "ticket_priority",
 } as const;
 
 export const ANALYTICS_QUERIES = {
@@ -29,10 +29,10 @@ export const ANALYTICS_QUERIES = {
     chartType: "pie" as ChartType,
     groupBy: "category",
   },
-  [ANALYTICS_METRICS.resolution_time]: {
-    metric: "resolution_time",
-    chartType: "line" as ChartType,
-    groupBy: "date",
+  [ANALYTICS_METRICS.ticket_priority]: {
+    metric: "issue_distribution",
+    chartType: "pie" as ChartType,
+    groupBy: "priority",
   },
 } as const;
 
@@ -42,8 +42,8 @@ export type AnalyticsQuery = typeof ANALYTICS_QUERIES[AnalyticsMetric];
 // Helper function to get metric title
 export const getMetricTitle = (metric: string): string => {
   switch (metric) {
-    case ANALYTICS_METRICS.resolution_time:
-      return "Resolution Time Analysis";
+    case ANALYTICS_METRICS.ticket_priority:
+      return "Ticket Priority Analysis";
     case ANALYTICS_METRICS.satisfaction:
       return "Satisfaction Score Analysis";
     case ANALYTICS_METRICS.issue_distribution:

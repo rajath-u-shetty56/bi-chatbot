@@ -90,10 +90,10 @@ export default function AnalyticsPage() {
   // Enhanced suggested actions with more details
   const suggestedActions = [
     {
-      title: "Resolution Time Analysis",
-      label: "View ticket resolution trends",
-      action: "Show me the ticket resolution time trends",
-      description: "Analyze how quickly issues are being resolved over time",
+      title: "Ticket Priority Analysis",
+      label: "View ticket priority distribution",
+      action: "Show me the distribution of ticket priorities",
+      description: "Analyze the breakdown of tickets by priority level",
     },
     {
       title: "Customer Satisfaction",

@@ -1,4 +1,4 @@
-import { Dataset, DatasetSummary, QueryResult, AnalyticsData } from "./chat";
+import { Dataset, DatasetSummary, QueryResult, AnalyticsData, ChartType } from "./chat";
 
 // Base interface for all UI component data
 export interface BaseUIData {
@@ -35,26 +35,24 @@ export interface ErrorUIData extends BaseUIData {
   message: string;
 }
 
-export interface ReportUIData extends BaseUIData {
-  type: 'report';
-  data: ReportData;
+export interface ReportSection {
+  title: string;
+  metrics: Array<{ label: string; value: string }>;
+  insights: string[];
+  data: any[];
+  aiExplanation?: string;
+  chartType: ChartType;
 }
 
 export interface ReportData {
-  datasetId: string;
-  reportType: string;
-  metrics: string[];
-  generated: string;
-  sections: Array<{
-    title: string;
-    content: string;
-    visualization?: {
-      chartType?: "bar" | "line" | "pie" | "table";
-      data: any[];
-      summary: string;
-      insights: Array<string>;
-    };
-  }>;
+  title: string;
+  description: string;
+  sections: ReportSection[];
+}
+
+export interface ReportUIData extends BaseUIData {
+  type: 'report';
+  data: ReportData;
 }
 
 export type UIComponentData = 

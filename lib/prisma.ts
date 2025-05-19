@@ -34,7 +34,7 @@ export async function getTicketAnalytics(
     case "satisfaction":
       return getSatisfactionAnalytics(whereClause);
     case "issue_distribution":
-      return getIssueDistributionAnalytics(whereClause);
+      return getIssueDistributionAnalytics(whereClause, groupBy);
     case "ticket_count":
       return getTicketTrendsAnalytics(whereClause, groupBy || 'month');
     default:
@@ -519,43 +519,54 @@ async function getSatisfactionAnalytics(whereClause: any) {
   };
 }
 
-async function getIssueDistributionAnalytics(whereClause: any) {
-  // Get issue type distribution
-  const issueTypes = await db.ticket.groupBy({
-    by: ['issueType'],
-    where: whereClause,
-    _count: true
-  });
-  
-  // Get request category distribution
-  const categories = await db.ticket.groupBy({
-    by: ['requestCategory'],
-    where: whereClause,
-    _count: true
-  });
-  
-  // Format distributions
-  const issueDistribution = issueTypes.map(issue => ({
-    type: issue.issueType,
-    count: issue._count
-  }));
-  
-  const categoryDistribution = categories.map(category => ({
-    name: category.requestCategory,
-    count: category._count
-  }));
-  
-  // Find top issue type
-  const sortedIssues = [...issueDistribution].sort((a, b) => b.count - a.count);
-  const topIssue = sortedIssues.length > 0 ? sortedIssues[0] : { type: 'None', count: 0 };
-  
-  // Find top categories
-  const sortedCategories = [...categoryDistribution].sort((a, b) => b.count - a.count);
+async function getIssueDistributionAnalytics(whereClause: any, groupBy?: string) {
+  let data;
+  let topItem;
+  let categories;
+
+  if (groupBy === 'priority') {
+    // Get priority distribution
+    const priorities = await db.ticket.groupBy({
+      by: ['priority'],
+      where: whereClause,
+      _count: true
+    });
+    
+    // Format distribution
+    data = priorities.map(priority => ({
+      type: priority.priority,
+      count: priority._count
+    }));
+    
+    // Sort for top priority
+    const sortedPriorities = [...data].sort((a, b) => b.count - a.count);
+    topItem = sortedPriorities.length > 0 ? sortedPriorities[0] : { type: 'None', count: 0 };
+    categories = sortedPriorities;
+  } else {
+    // Get issue type distribution
+    const issueTypes = await db.ticket.groupBy({
+      by: ['issueType'],
+      where: whereClause,
+      _count: true
+    });
+    
+    // Format distribution
+    data = issueTypes.map(issue => ({
+      type: issue.issueType,
+      count: issue._count
+    }));
+    
+    // Sort for top issue
+    const sortedIssues = [...data].sort((a, b) => b.count - a.count);
+    topItem = sortedIssues.length > 0 ? sortedIssues[0] : { type: 'None', count: 0 };
+    categories = sortedIssues;
+  }
   
   return {
-    issueDistribution,
-    topIssue,
-    categories: sortedCategories
+    issueDistribution: data,
+    topIssue: topItem,
+    categories: categories,
+    data: data // This is the data that will be used for visualization
   };
 }
 
